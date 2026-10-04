@@ -12,7 +12,7 @@
 		{
 			"binding": "DB",
 			"database_name": "pixel-plot",
-			"database_id": "6dfaba8b-31fe-4fd3-887f-9dc4912172d5",
+			"database_id": "be592dbf-d420-4299-94ac-61d0f00a8835",
 			"migrations_dir": "drizzle"
 		}
 	]

@@ -39,7 +39,7 @@ async function init(): Promise<TestDb> {
 	});
 	const d1 = proxy.env.DB;
 	await execSql(d1, 'drizzle/0000_curvy_masque.sql');
-	await execSql(d1, 'drizzle/seed.sql');
+	await execSql(d1, 'drizzle/0001_seed.sql');
 	return { d1, db: drizzle(d1, { schema }), dispose: () => proxy.dispose() };
 }
 

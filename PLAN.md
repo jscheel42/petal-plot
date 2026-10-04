@@ -42,7 +42,7 @@ Alternatives considered:
 
 Consequences:
 - SQLite dialect end-to-end — Drizzle `d1` driver everywhere; every query async.
-- Migrations authored by drizzle-kit (`drizzle/`), applied by `wrangler d1 migrations apply` (local + remote); seed is `drizzle/seed.sql`.
+- Migrations authored by drizzle-kit (`drizzle/`, seed as `0001_seed.sql`), applied by `wrangler d1 migrations apply` (local + remote); one-off port files live in `scripts/`, never in `migrations_dir` (wrangler applies every `.sql` there, alphabetically).
 - No instance cap, no volume, no bucket, no sidecar. Dev/prod share the same binding via the platform proxy.
 
 ## Data Model
@@ -127,10 +127,10 @@ erDiagram
 ### Phase 6 — Workers + D1 cutover
 - [x] adapter-cloudflare + wrangler config; drop Docker/Cloud Run/Litestream
 - [x] Data layer async: `drizzle-orm/d1`, `env.DB` via `cloudflare:workers`; dev = platform proxy, tests = ephemeral proxy
-- [x] Migrations + seed applied by wrangler (`drizzle/seed.sql`)
+- [x] Migrations + seed applied by wrangler (`drizzle/0001_seed.sql`)
 - [x] 12/12 tests green against real D1 SQL; local browser smoke verified
-- [ ] `wrangler login` + `d1 create` + remote migrate + `wrangler deploy`
-- [ ] Port Cloud Run data (Cloud Garden) into D1, verify, then tear down Cloud Run/GCS/AR
+- [ ] `wrangler deploy` to workers.dev
+- [ ] Port Cloud Run data (Cloud Garden) into D1 (`scripts/port-cloud-run.sql`), verify, then tear down Cloud Run/GCS/AR
 - [ ] Auth (Cloudflare Access in front of the worker instead of rolling our own)
 
 ### Phase 7 — Stretch (pick later)

@@ -12,6 +12,7 @@
 		"db:migrate": "wrangler d1 migrations apply pixel-plot --local",
 		"db:migrate:remote": "wrangler d1 migrations apply pixel-plot --remote",
 		"deploy": "vite build && wrangler deploy",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run"
 	},

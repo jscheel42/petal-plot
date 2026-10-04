@@ -5,6 +5,8 @@ planted where, get crop-rotation warnings, and replay any past date with a slide
 
 **Stack:** SvelteKit 3 (Svelte 5 runes, TS) · Tailwind v4 · Drizzle ORM · Cloudflare D1 (serverless SQLite) · Cloudflare Workers.
 
+**Live:** https://pixel-plot.pixel-plot.workers.dev
+
 ## Run locally (dev)
 
 ```bash
@@ -58,6 +60,7 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 src/lib/server/    schema.ts · db.ts · rotation.ts · test-db.ts
 src/routes/api/    gardens · plots · plantings · plants catalog
 src/lib/components/ Canvas.svelte · DetailPanel.svelte
-drizzle/           SQL migrations + seed (applied by wrangler)
+drizzle/           SQL migrations (0000 schema, 0001 seed) — applied by wrangler
+scripts/           one-off SQL (Cloud Run data port)
 wrangler.jsonc     worker + D1 binding + assets config
 ```
