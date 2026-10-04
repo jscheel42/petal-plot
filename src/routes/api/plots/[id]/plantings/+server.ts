@@ -10,14 +10,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const plotId = Number(params.id);
 	const b = await request.json().catch(() => ({}));
 	const db = getDb();
-	if (!db.select({ id: plot.id }).from(plot).where(eq(plot.id, plotId)).get()) {
+	if (!(await db.select({ id: plot.id }).from(plot).where(eq(plot.id, plotId)).get())) {
 		return json({ error: 'plot not found' }, { status: 404 });
 	}
 	const plantId = Number(b.plantId);
 	const quantity = Number(b.quantity);
 	const plantedOn = typeof b.plantedOn === 'string' ? b.plantedOn : todayISO();
 
-	if (!db.select({ id: plant.id }).from(plant).where(eq(plant.id, plantId)).get()) {
+	if (!(await db.select({ id: plant.id }).from(plant).where(eq(plant.id, plantId)).get())) {
 		return json({ error: 'plant not found' }, { status: 404 });
 	}
 	if (!Number.isInteger(quantity) || quantity < 1) {
@@ -28,8 +28,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	}
 
 	// Compute warnings BEFORE insert so the row being created isn't its own occupancy conflict.
-	const warnings = rotationWarnings(db, plotId, plantId, plantedOn);
-	const row = db
+	const warnings = await rotationWarnings(db, plotId, plantId, plantedOn);
+	const row = await db
 		.insert(planting)
 		.values({ plotId, plantId, quantity, plantedOn })
 		.returning()

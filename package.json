@@ -8,31 +8,41 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test:e2e": "playwright test",
+		"db:migrate": "wrangler d1 migrations apply pixel-plot --local",
+		"db:migrate:remote": "wrangler d1 migrations apply pixel-plot --remote",
+		"deploy": "vite build && wrangler deploy",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run"
 	},
 	"devDependencies": {
+		"@cloudflare/workers-types": "^5.20261004.1",
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"@types/better-sqlite3": "^9.6.0",
 		"@types/node": "^26.6.4",
 		"drizzle-kit": "^0.31.11",
 		"svelte": "^5.56.7",
 		"svelte-check": "^4.6.0",
 		"typescript": "^6.0.3",
 		"vite": "^8.3.0",
-		"vitest": "^5.0.3"
+		"vitest": "^5.0.3",
+		"wrangler": "^4.147.0"
 	},
 	"imports": {
 		"#lib": "./src/lib/index.js",
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
-		"@sveltejs/adapter-node": "^6.0.0",
+		"@sveltejs/adapter-cloudflare": "^8.0.0",
 		"@tailwindcss/vite": "^4.3.3",
-		"better-sqlite3": "^13.0.3",
 		"drizzle-orm": "^0.45.3",
 		"tailwindcss": "^4.3.3"
+	},
+	"allowScripts": {
+		"workerd@1.20261001.1": true,
+		"esbuild@0.18.20": true,
+		"esbuild@0.25.12": true,
+		"esbuild@0.28.2": true,
+		"esbuild@0.28.1": true
 	}
 }

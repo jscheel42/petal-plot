@@ -9,7 +9,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	const body = await request.json().catch(() => ({}));
 	const name = typeof body.name === 'string' ? body.name.trim() : '';
 	if (!name) return json({ error: 'name required' }, { status: 400 });
-	const row = getDb()
+	const row = await getDb()
 		.update(garden)
 		.set({ name })
 		.where(eq(garden.id, id))
@@ -21,7 +21,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 export const DELETE: RequestHandler = async ({ params }) => {
 	const id = Number(params.id);
-	const row = getDb()
+	const row = await getDb()
 		.delete(garden)
 		.where(eq(garden.id, id))
 		.returning({ id: garden.id })

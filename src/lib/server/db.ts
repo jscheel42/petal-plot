@@ -1,31 +1,17 @@
-import Database from 'better-sqlite3';
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { env } from 'cloudflare:workers';
+import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from './schema';
-import { seedPlants } from './seed';
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
 
-let _db: BetterSQLite3Database<typeof schema> | null = null;
+export type DB = DrizzleD1Database<typeof schema>;
 
 /**
- * Lazy singleton: opens the SQLite file, applies pending migrations,
- * and seeds the plant catalog on first access. Safe to call from any
- * server route; the heavy work happens exactly once per process.
+ * Bind Drizzle to the D1 binding from the worker environment.
+ * In production this is the real workerd `cloudflare:workers` env; in dev
+ * the adapter's platformProxy virtual module backs it with local D1.
+ * Migrations + seed are applied out-of-band via `wrangler d1 migrations apply`.
  */
-export function getDb(): BetterSQLite3Database<typeof schema> {
-	if (!_db) {
-		const file = process.env.PIXEL_DB ?? '.data/pixel.db';
-		const abs = path.resolve(file);
-		mkdirSync(path.dirname(abs), { recursive: true });
-		const raw = new Database(abs);
-		raw.pragma('journal_mode = WAL');
-		raw.pragma('foreign_keys = ON');
-		_db = drizzle(raw, { schema });
-		migrate(_db, { migrationsFolder: path.resolve('drizzle') });
-		seedPlants(_db);
-	}
-	return _db;
+export function getDb(): DB {
+	return drizzle(env.DB, { schema });
 }
 
 export function todayISO(): string {

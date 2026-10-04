@@ -5,7 +5,7 @@ import { garden } from '#lib/server/schema';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async () => {
-	const gardens = getDb()
+	const gardens = await getDb()
 		.select({ id: garden.id, name: garden.name })
 		.from(garden)
 		.orderBy(asc(garden.id))
@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json().catch(() => ({}));
 	const name = typeof body.name === 'string' ? body.name.trim() : '';
 	if (!name) return json({ error: 'name required' }, { status: 400 });
-	const row = getDb()
+	const row = await getDb()
 		.insert(garden)
 		.values({ name })
 		.returning({ id: garden.id, name: garden.name })

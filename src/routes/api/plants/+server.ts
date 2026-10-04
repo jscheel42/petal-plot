@@ -15,6 +15,7 @@ export const GET: RequestHandler = async () => {
 			sun: plant.sun
 		})
 		.from(plant)
-		.orderBy(asc(plant.family), asc(plant.name));
+		.orderBy(asc(plant.family), asc(plant.name))
+		.all();
 	return json({ plants: rows });
 };

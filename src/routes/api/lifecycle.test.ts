@@ -1,13 +1,24 @@
 // API route integration tests: garden → plot → plant → harvest lifecycle,
 // overlap rejection, validation errors, and as-of replay.
 import { describe, expect, it } from 'vitest';
+import { testDb } from '#lib/server/test-db';
 import { GET as listGardens, POST as createGarden } from './gardens/+server.ts';
 import { GET as getPlots, POST as createPlot } from './gardens/[id]/plots/+server.ts';
 import { POST as addPlanting } from './plots/[id]/plantings/+server.ts';
 import { PATCH as harvest } from './plantings/[id]/+server.ts';
 import { GET as getHistory } from './plots/[id]/history/+server.ts';
 
-type Handler = (event: { params: Record<string, string>; request: Request; url: URL }) => Promise<Response>;
+// Alias-resolved harness boots the ephemeral D1 + applies migrations/seed.
+await testDb();
+
+// Minimal fake event; routes are RequestHandler, so each call site casts
+// through this looser shape.
+type Event = {
+	params: Record<string, string>;
+	request: Request;
+	url: URL;
+};
+type Handler = (event: Event) => Promise<Response>;
 
 async function call<T = Record<string, unknown>>(
 	handler: Handler,
@@ -17,7 +28,11 @@ async function call<T = Record<string, unknown>>(
 		method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
 		body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined
 	});
-	const res = await handler({ params: opts.params ?? {}, request: req, url: new URL(req.url) });
+	const res = await handler({
+		params: opts.params ?? {},
+		request: req,
+		url: new URL(req.url)
+	});
 	return { status: res.status, json: await res.json() };
 }
 

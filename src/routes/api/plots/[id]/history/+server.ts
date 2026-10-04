@@ -8,10 +8,10 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ params }) => {
 	const plotId = Number(params.id);
 	const db = getDb();
-	if (!db.select({ id: plot.id }).from(plot).where(eq(plot.id, plotId)).get()) {
+	if (!(await db.select({ id: plot.id }).from(plot).where(eq(plot.id, plotId)).get())) {
 		return json({ error: 'plot not found' }, { status: 404 });
 	}
-	const history = db
+	const history = await db
 		.select({
 			id: planting.id,
 			name: plant.name,

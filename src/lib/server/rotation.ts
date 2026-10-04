@@ -4,33 +4,34 @@
 //     planting date) — planting it again is a duplicate.
 //  2. rotation: the same family was planted in this plot during the previous
 //     calendar year — classic rotation violation ("bed 3 had brassicas last year").
-import { and, eq, gte, lt, lte, or, isNull, gt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, lte, or, isNull, gt } from 'drizzle-orm';
 import { plant, planting } from './schema';
-import type { DB } from './seed';
+import type { DB } from './db';
 
 export type Warning = { kind: 'occupancy' | 'rotation' | 'unknown'; message: string };
 
 /**
  * Warnings for planting `plantId` into `plotId` on `plantedOn` (YYYY-MM-DD).
- * Returns [] when everything looks fine.
+ * Resolves to [] when everything looks fine.
  */
-export function rotationWarnings(
+export async function rotationWarnings(
 	db: DB,
 	plotId: number,
 	plantId: number,
 	plantedOn: string
-): Warning[] {
-	const family = db
+): Promise<Warning[]> {
+	const plantRow = await db
 		.select({ family: plant.family })
 		.from(plant)
 		.where(eq(plant.id, plantId))
-		.get()?.family;
+		.get();
+	const family = plantRow?.family;
 	if (!family) {
 		return [{ kind: 'unknown', message: `Unknown plant #${plantId}` }];
 	}
 
 	// 1. occupancy: same family actively growing at plantedOn
-	const active = db
+	const active = await db
 		.select({ name: plant.name })
 		.from(planting)
 		.innerJoin(plant, eq(planting.plantId, plant.id))
@@ -54,7 +55,7 @@ export function rotationWarnings(
 
 	// 2. rotation: same family planted in the previous calendar year
 	const prevYear = Number(plantedOn.slice(0, 4)) - 1;
-	const prev = db
+	const prev = await db
 		.select({ name: plant.name, plantedOn: planting.plantedOn })
 		.from(planting)
 		.innerJoin(plant, eq(planting.plantId, plant.id))

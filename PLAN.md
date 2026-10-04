@@ -18,33 +18,32 @@ One TypeScript codebase, full-stack.
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Framework | SvelteKit (TS) + `adapter-node` | Hot reload, small bundle, server routes + UI in one repo; produces a plain Node server that Dockerizes trivially |
+| Framework | SvelteKit (TS) + `adapter-cloudflare` | Hot reload, small bundle, server routes + UI in one repo; deploys as a Workers static-assets site |
 | UI styling | Tailwind CSS | Fast to style the editor chrome; skip if plain CSS preferred |
 | Canvas | Custom HTML5 `<canvas>` renderer | The plot editor is the heart of the app; a hand-rolled grid renderer is ~200 lines and avoids heavyweight libs |
-| DB access | Drizzle ORM | Typed queries, first-class SQLite and Postgres support — lets storage swap without a rewrite |
-| Database (local) | SQLite file on a Docker named volume | Zero-config, file-based, perfect for single-user local use |
-| Database (hosted) | SQLite + Litestream → GCS | Same SQLite file everywhere; sidecar replicates continuously to a GCS bucket — <$1/mo, no dialect swap |
-| Runtime | Node 22 LTS | Boring deploys; Cloud Run's Node image support is first-class |
+| DB access | Drizzle ORM (`drizzle-orm/d1`) | Typed queries; D1 speaks SQLite dialect, queries stay async |
+| Database (local) | Local D1 via wrangler platform proxy | `npm run dev` serves the same `cloudflare:workers` binding against a local SQLite in `.wrangler/state/` — no account needed |
+| Database (hosted) | Cloudflare D1 | Serverless SQLite, free tier, managed 7–30 day point-in-time restore (Time Travel); no backup sidecar |
+| Runtime | workerd (Cloudflare Workers) | Scale-to-zero by default; free tier covers hobby traffic |
 
 Alternatives considered:
+- **Cloud Run + Litestream→GCS** (shipped at Phase 5, later superseded): same SQLite file everywhere, but a sidecar to babysit, a restore race on cold starts, and a single-writer instance cap. Workers + D1 removes all three for $0/mo with managed Time Travel; the migration cost was the async data layer (sync `better-sqlite3` → async D1 driver).
 - **Go + HTMX**: tiny image, also fun; more code for interactive canvas state.
-- **Bun**: faster dev loop; Cloud Run support still friction compared to Node.
-- **Cloud SQL Postgres**: the "standard" Cloud Run story, but ~$10+/mo minimum for an always-on instance — pays for reliability a low-use hobby app doesn't need. Kept as fallback if Litestream restore proves flaky.
+- **Cloud SQL Postgres**: the "standard" Cloud Run story, but ~$10+/mo minimum — pays for reliability a low-use hobby app doesn't need.
 
 ## Storage Decision (cost-capped: target < $2/mo)
 
-Cloud Run filesystems are ephemeral, so storage must live outside the container. This is a low-use hobby app, so cost is a hard constraint:
-
 | Option | ~Cost/mo | Verdict |
 |--------|----------|---------|
-| SQLite + Litestream → GCS | <$1 | **Chosen.** Litestream sidecar streams the SQLite file to a GCS bucket (a few MB = pennies). Cloud Run supports multi-container revisions; instance scales to zero, restores latest replica on wake. |
-| Cloud SQL Postgres | $10+ | Solid, but overkill for this usage level; fallback only |
-| Filestore NFS | $200+ | Explicitly ruled out |
+| Cloudflare D1 | $0 | **Chosen (cutover).** Serverless SQLite on Workers; free tier (5M reads + 100k writes/day, 5 GB) dwarfs hobby traffic; 7-day Time Travel (30 on paid) replaces Litestream entirely. |
+| SQLite + Litestream → GCS | <$1 | Shipped at Phase 5, verified (cold-restart restore proven), then superseded by D1 to eliminate the sidecar + restore race. |
+| Cloud SQL Postgres | $10+ | Overkill for this usage level. |
+| Filestore NFS | $200+ | Explicitly ruled out. |
 
 Consequences:
-- SQLite end-to-end — no dialect swap, forever. Drizzle still used for typed queries + migrations.
-- Cloud Run pinned to `--max-instances=1`: Litestream is single-writer, and low traffic means the cap costs nothing.
-- Litestream only runs in the hosted revision. Local dev stays simple: SQLite file on a Docker named volume. When cutting over to the cloud, the local DB is pushed once and Litestream takes it from there.
+- SQLite dialect end-to-end — Drizzle `d1` driver everywhere; every query async.
+- Migrations authored by drizzle-kit (`drizzle/`), applied by `wrangler d1 migrations apply` (local + remote); seed is `drizzle/seed.sql`.
+- No instance cap, no volume, no bucket, no sidecar. Dev/prod share the same binding via the platform proxy.
 
 ## Data Model
 
@@ -119,24 +118,25 @@ erDiagram
 - [x] Rotation warning badge: "bed 3 had brassicas last year"
 - [x] Acceptance: full season tracked end-to-end; rotation warnings correct on seeded data
 
-### Phase 4 — Docker local deploy (~1h)
-- [x] Multi-stage Dockerfile: build SvelteKit → slim node runtime, volume-mounted `data/`
-- [x] `docker compose up` → app at localhost:3000, survives `docker compose down/up`
-- [x] README with run instructions
+### Phase 4 — Docker local deploy (superseded by Phase 6)
+- [x] Multi-stage Dockerfile + `docker compose up` with named volume — worked, later removed with the Workers cutover
 
-### Phase 5 — Cloud Run (~2h; GCP project + billing ready; budget <$2/mo)
-- [x] GCS bucket for Litestream replicas (standard storage; DB is a few MB ≈ pennies)
-- [x] Multi-container revision: app container + litestream sidecar sharing an ephemeral volume
-- [x] Startup: sidecar restores latest replica before app serves; `--max-instances=1` (single writer)
-- [x] Push image to Artifact Registry; deploy via Cloud Run v2 REST (`deploy/deploy.sh`)
-- [x] Verify: add a plot → force revision restart → data intact; sanity-check projected monthly cost
-- [ ] Custom domain (optional)
+### Phase 5 — Cloud Run (superseded by Phase 6)
+- [x] GCS bucket + Litestream sidecar + `--max-instances=1`; cold-restart restore verified end-to-end — later removed with the Workers cutover
 
-### Phase 6 — Stretch (pick later)
+### Phase 6 — Workers + D1 cutover
+- [x] adapter-cloudflare + wrangler config; drop Docker/Cloud Run/Litestream
+- [x] Data layer async: `drizzle-orm/d1`, `env.DB` via `cloudflare:workers`; dev = platform proxy, tests = ephemeral proxy
+- [x] Migrations + seed applied by wrangler (`drizzle/seed.sql`)
+- [x] 12/12 tests green against real D1 SQL; local browser smoke verified
+- [ ] `wrangler login` + `d1 create` + remote migrate + `wrangler deploy`
+- [ ] Port Cloud Run data (Cloud Garden) into D1, verify, then tear down Cloud Run/GCS/AR
+- [ ] Auth (Cloudflare Access in front of the worker instead of rolling our own)
+
+### Phase 7 — Stretch (pick later)
 - Weather/frost-date integration (free NOAA-ish API)
 - Watering schedule view
 - PNG/PDF export of garden map
-- Auth (Cloud Run IAP instead of rolling our own)
 
 ## Testing & Verification Strategy
 
@@ -150,4 +150,5 @@ erDiagram
 | Garden scope | **Multi-garden** from day one (garden switcher) |
 | Units | **1 grid square = 1 ft** |
 | History UI | **Date slider** scrubbing |
-| GCP | Project + billing **ready**; deploy at Phase 5 |
+| GCP | Project + billing **ready**; deployed at Phase 5 (Cloud Run + Litestream) |
+| Hosting | **Cloudflare Workers + D1** (Phase 6 cutover): $0/mo, managed Time Travel, no sidecar; Cloud Run/GCS/AR torn down |

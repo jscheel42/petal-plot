@@ -12,7 +12,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(endedOn) || endedOn > todayISO()) {
 		return json({ error: 'endedOn must be a valid date, not in the future' }, { status: 400 });
 	}
-	const row = getDb()
+	const row = await getDb()
 		.update(planting)
 		.set({ endedOn })
 		.where(and(eq(planting.id, id), lte(planting.plantedOn, endedOn)))

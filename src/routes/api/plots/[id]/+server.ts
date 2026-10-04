@@ -14,7 +14,7 @@ function rectsOverlap(
 	a: { x: number; y: number; w: number; h: number },
 	b: { x: number; y: number; w: number; h: number }
 ): boolean {
-	return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+	return a.x < b.x + b.w && b.x < a.x + b.w && a.y < b.y + b.h && b.y < a.y + b.h;
 }
 
 // PATCH accepts any subset of { name, type, x, y, w, h }.
@@ -22,7 +22,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	const id = Number(params.id);
 	const b = await request.json().catch(() => ({}));
 	const db = getDb();
-	const existing = db.select().from(plot).where(eq(plot.id, id)).get();
+	const existing = await db.select().from(plot).where(eq(plot.id, id)).get();
 	if (!existing) return json({ error: 'plot not found' }, { status: 404 });
 
 	const type = typeof b.type === 'string' ? PLOT_TYPE_VALUES[b.type] : undefined;
@@ -36,21 +36,21 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	};
 	if (next.x < 0 || next.y < 0) return json({ error: 'x/y must be >= 0' }, { status: 400 });
 
-	const clash = db
+	const others = await db
 		.select()
 		.from(plot)
 		.where(and(eq(plot.gardenId, existing.gardenId), ne(plot.id, id)))
-		.all()
-		.find((p) => rectsOverlap(p, next));
+		.all();
+	const clash = others.find((p) => rectsOverlap(p, next));
 	if (clash) return json({ error: `overlaps ${clash.name}` }, { status: 409 });
 
-	const row = db.update(plot).set(next).where(eq(plot.id, id)).returning().get();
+	const row = await db.update(plot).set(next).where(eq(plot.id, id)).returning().get();
 	return json({ plot: row });
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {
 	const id = Number(params.id);
-	const row = getDb()
+	const row = await getDb()
 		.delete(plot)
 		.where(eq(plot.id, id))
 		.returning({ id: plot.id })

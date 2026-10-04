@@ -18,7 +18,7 @@ function rectsOverlap(
 	a: { x: number; y: number; w: number; h: number },
 	b: { x: number; y: number; w: number; h: number }
 ): boolean {
-	return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+	return a.x < b.x + b.w && b.x < a.x + b.w && a.y < b.y + b.h && b.y < a.y + b.h;
 }
 
 // GET ?asof=YYYY-MM-DD — plots with plantings active on that date + rotation badges.
@@ -26,16 +26,16 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	const gardenId = Number(params.id);
 	const asof = url.searchParams.get('asof') ?? todayISO();
 	const db = getDb();
-	if (!db.select({ id: garden.id }).from(garden).where(eq(garden.id, gardenId)).get()) {
+	if (!(await db.select({ id: garden.id }).from(garden).where(eq(garden.id, gardenId)).get())) {
 		return json({ error: 'garden not found' }, { status: 404 });
 	}
-	const plots = db.select().from(plot).where(eq(plot.gardenId, gardenId)).orderBy(asc(plot.id)).all();
+	const plots = await db.select().from(plot).where(eq(plot.gardenId, gardenId)).orderBy(asc(plot.id)).all();
 	const plotIds = plots.map((p) => p.id);
 
 	const actives =
 		plotIds.length === 0
 			? []
-			: db
+			: await db
 					.select({
 						id: planting.id,
 						plotId: planting.plotId,
@@ -62,7 +62,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	const prevs =
 		plotIds.length === 0
 			? []
-			: db
+			: await db
 					.select({
 						plotId: planting.plotId,
 						family: plant.family,
@@ -119,14 +119,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'valid name, type, and x/y/w/h (integers, w/h >= 1) required' }, { status: 400 });
 	}
 	const db = getDb();
-	if (!db.select({ id: garden.id }).from(garden).where(eq(garden.id, gardenId)).get()) {
+	if (!(await db.select({ id: garden.id }).from(garden).where(eq(garden.id, gardenId)).get())) {
 		return json({ error: 'garden not found' }, { status: 404 });
 	}
-	const existing = db.select().from(plot).where(eq(plot.gardenId, gardenId)).all();
+	const existing = await db.select().from(plot).where(eq(plot.gardenId, gardenId)).all();
 	const clash = existing.find((p) => rectsOverlap(p, { x, y, w, h }));
 	if (clash) return json({ error: `overlaps ${clash.name}` }, { status: 409 });
 
-	const row = db
+	const row = await db
 		.insert(plot)
 		.values({ gardenId, name, type, x, y, w, h })
 		.returning()
