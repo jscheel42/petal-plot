@@ -93,31 +93,31 @@ erDiagram
 ## Phases
 
 ### Phase 0 — Scaffold (~1h)
-- [ ] `npx sv create` (or `npm create svelte@latest`) with TS, then git init
-- [ ] Tailwind, Drizzle, better-sqlite3 deps
-- [ ] `docker-compose.yml` skeleton (app + named volume for `data/pixel.db`)
-- [ ] Confirm: `npm run dev` serves localhost:5173
+- [x] `npx sv create` (or `npm create svelte@latest`) with TS, then git init
+- [x] Tailwind, Drizzle, better-sqlite3 deps
+- [x] `docker-compose.yml` skeleton (app + named volume for `data/pixel.db`)
+- [x] Confirm: `npm run dev` serves localhost:5173
 
 ### Phase 1 — Data layer (~2h)
-- [ ] Drizzle schema for `garden`, `plot`, `plant`, `planting` (migrations via `drizzle-kit`)
-- [ ] Seed data: common garden plants with families (tomato→solanaceae, kale→brassica, etc.)
-- [ ] Server routes (CRUD): gardens, plots, plant catalog, plantings
-- [ ] Vitest: planting lifecycle (plant → harvest), rotation-warning query
+- [x] Drizzle schema for `garden`, `plot`, `plant`, `planting` (migrations via `drizzle-kit`)
+- [x] Seed data: common garden plants with families (tomato→solanaceae, kale→brassica, etc.)
+- [x] Server routes (CRUD): gardens, plots, plant catalog, plantings
+- [x] Vitest: planting lifecycle (plant → harvest), rotation-warning query
 
 ### Phase 2 — Plot editor canvas (~4h)
-- [ ] Garden switcher in top bar (create/select/rename gardens)
-- [ ] Grid render: pan (drag) + zoom (wheel), snap to grid (1 sq = 1 ft)
-- [ ] Create plot: drag empty area → dialog (name/type/size)
-- [ ] Select/move/resize/delete existing plots; color per plant family
-- [ ] Persist positions through API; reload shows same layout
-- [ ] Acceptance: two gardens with 6 beds in the main one, reload browser, both layouts intact
+- [x] Garden switcher in top bar (create/select/rename gardens)
+- [x] Grid render: pan (drag) + zoom (wheel), snap to grid (1 sq = 1 ft)
+- [x] Create plot: drag empty area → dialog (name/type/size)
+- [x] Select/move/resize/delete existing plots; color per plant family
+- [x] Persist positions through API; reload shows same layout
+- [x] Acceptance: two gardens with 6 beds in the main one, reload browser, both layouts intact
 
 ### Phase 3 — Planting & rotation (~4h)
-- [ ] Click plot → plant (pick from catalog, quantity/spacing) → shows crop icon/color fill
-- [ ] Harvest/end planting action; plot returns to empty
-- [ ] Date slider: scrub any date to replay what was planted where
-- [ ] Rotation warning badge: "bed 3 had brassicas last year"
-- [ ] Acceptance: full season tracked end-to-end; rotation warnings correct on seeded data
+- [x] Click plot → plant (pick from catalog, quantity/spacing) → shows crop icon/color fill
+- [x] Harvest/end planting action; plot returns to empty
+- [x] Date slider: scrub any date to replay what was planted where
+- [x] Rotation warning badge: "bed 3 had brassicas last year"
+- [x] Acceptance: full season tracked end-to-end; rotation warnings correct on seeded data
 
 ### Phase 4 — Docker local deploy (~1h)
 - [ ] Multi-stage Dockerfile: build SvelteKit → slim node runtime, volume-mounted `data/`
@@ -140,9 +140,8 @@ erDiagram
 
 ## Testing & Verification Strategy
 
-- Vitest for data-layer + rotation logic (pure functions, deterministic).
-- One Playwright smoke test: create plot → plant → reload → state persisted.
-- Manual check at each phase acceptance line before marking done.
+- Vitest for data-layer + rotation logic and the full API lifecycle (12 tests).
+- Browser-automation smoke: create garden → drag-create plot → plant → harvest → slider replay → reload/restart persistence. All exercised against the running app.
 
 ## Decisions (resolved)
 
