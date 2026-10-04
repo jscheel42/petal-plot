@@ -120,16 +120,16 @@ erDiagram
 - [x] Acceptance: full season tracked end-to-end; rotation warnings correct on seeded data
 
 ### Phase 4 — Docker local deploy (~1h)
-- [ ] Multi-stage Dockerfile: build SvelteKit → slim node runtime, volume-mounted `data/`
-- [ ] `docker compose up` → app at localhost:3000, survives `docker compose down/up`
-- [ ] README with run instructions
+- [x] Multi-stage Dockerfile: build SvelteKit → slim node runtime, volume-mounted `data/`
+- [x] `docker compose up` → app at localhost:3000, survives `docker compose down/up`
+- [x] README with run instructions
 
 ### Phase 5 — Cloud Run (~2h; GCP project + billing ready; budget <$2/mo)
-- [ ] GCS bucket for Litestream replicas (standard storage; DB is a few MB ≈ pennies)
-- [ ] Multi-container revision: app container + litestream sidecar sharing an ephemeral volume
-- [ ] Startup: sidecar restores latest replica before app serves; `--max-instances=1` (single writer)
-- [ ] Push image to Artifact Registry; `gcloud run deploy` with a service account scoped to the bucket
-- [ ] Verify: add a plot → force revision restart → data intact; sanity-check projected monthly cost
+- [x] GCS bucket for Litestream replicas (standard storage; DB is a few MB ≈ pennies)
+- [x] Multi-container revision: app container + litestream sidecar sharing an ephemeral volume
+- [x] Startup: sidecar restores latest replica before app serves; `--max-instances=1` (single writer)
+- [x] Push image to Artifact Registry; deploy via Cloud Run v2 REST (`deploy/deploy.sh`)
+- [x] Verify: add a plot → force revision restart → data intact; sanity-check projected monthly cost
 - [ ] Custom domain (optional)
 
 ### Phase 6 — Stretch (pick later)
