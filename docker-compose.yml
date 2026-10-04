@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    volumes:
+      - pixel-data:/data
+    environment:
+      PIXEL_DB: /data/pixel.db
+    restart: unless-stopped
+
+volumes:
+  pixel-data:
