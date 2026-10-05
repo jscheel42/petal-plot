@@ -53,6 +53,8 @@ let fittedFor = $state<number | null>(null);
 let positioned = $state(false); // view already placed on real data (or restored)
 let userTouched = $state(false); // user panned/zoomed → stop auto-fit, start persisting
 let saveT = 0;
+// Label visibility persists across reloads; typeof guard for SSR.
+let showLabels = $state(typeof localStorage === 'undefined' || localStorage.getItem('petalPlot.showLabels') !== 'off');
 
 type Drag =
 	| { mode: 'pan'; sx: number; sy: number; v0: { vx: number; vy: number; scale: number } }
@@ -228,6 +230,16 @@ function loadView(): boolean {
 	}
 }
 
+function toggleLabels() {
+	showLabels = !showLabels;
+	try {
+		localStorage.setItem('petalPlot.showLabels', showLabels ? 'on' : 'off');
+	} catch {
+		// persistence is best-effort
+	}
+	draw();
+}
+
 function draw() {
 	const el = canvas;
 	if (!el) return;
@@ -321,14 +333,16 @@ function draw() {
 		ctx.strokeStyle = sel ? ACCENT : SOIL_DARK;
 		ctx.lineWidth = sel ? 3 : 1.5;
 		ctx.strokeRect(X + 0.5, Y + 0.5, W - 1, H - 1);
-		ctx.fillStyle = '#ffffff';
-		ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
-		ctx.textAlign = 'left';
-		ctx.textBaseline = 'top';
-		ctx.shadowColor = 'rgba(0,0,0,0.6)';
-		ctx.shadowBlur = 3;
-		ctx.fillText(`${p.name} · ${p.w}×${p.h}ft`, X + 5, Y + 4);
-		ctx.shadowBlur = 0;
+		if (showLabels) {
+			ctx.fillStyle = '#ffffff';
+			ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+			ctx.textAlign = 'left';
+			ctx.textBaseline = 'top';
+			ctx.shadowColor = 'rgba(0,0,0,0.6)';
+			ctx.shadowBlur = 3;
+			ctx.fillText(`${p.name} · ${p.w}×${p.h}ft`, X + 5, Y + 4);
+			ctx.shadowBlur = 0;
+		}
 		if (p.warning) {
 			ctx.textAlign = 'right';
 			ctx.fillText('⚠️', X + W - 5, Y + 4);
@@ -542,6 +556,8 @@ onMount(async () => {
 			fit(plots);
 		} else if (e.key === 'c') {
 			centerOnSelected();
+		} else if (e.key === 'l') {
+			toggleLabels();
 		}
 	});
 	window.addEventListener('keyup', (e) => {
@@ -603,4 +619,9 @@ const cursor = $derived(
 		title="Center on selected plot (c)"
 		disabled={selectedId === null}
 		onclick={centerOnSelected}>◎</button>
+	<div class="mx-1.5 h-px bg-stone-200"></div>
+	<button
+		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100"
+		title="Toggle plot labels (l)"
+		onclick={toggleLabels}>🏷️</button>
 </div>
