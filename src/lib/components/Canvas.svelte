@@ -11,6 +11,10 @@ type PlantingView = {
 	emoji: string;
 	quantity: number;
 	spacing: number;
+	fx: number; // band anchor: whole feet from plot origin
+	fy: number;
+	fw: number; // band footprint: feet
+	fh: number;
 	plantedOn: string;
 };
 type PlotView = {
@@ -33,6 +37,7 @@ let {
 	oncreated,
 	onmoved,
 	onresized,
+	onplantmoved,
 	onselect
 }: {
 	plots: PlotView[];
@@ -41,10 +46,12 @@ let {
 	oncreated: (rect: { x: number; y: number; w: number; h: number }) => void;
 	onmoved: (id: number, x: number, y: number) => void;
 	onresized: (id: number, x: number, y: number, w: number, h: number) => void;
+	onplantmoved: (plantingId: number, x: number, y: number) => void;
 	onselect: (id: number | null) => void;
 } = $props();
 
 let hoverCorner = $state<'nw' | 'ne' | 'sw' | 'se' | null>(null);
+let hoverPlanting = $state(false);
 let canvas = $state<HTMLCanvasElement | undefined>();
 let view = $state({ vx: 0, vy: 0, scale: 26 }); // px per ft
 let drag = $state<Drag | null>(null);
@@ -60,6 +67,18 @@ type Drag =
 	| { mode: 'pan'; sx: number; sy: number; v0: { vx: number; vy: number; scale: number } }
 	| { mode: 'create'; ax: number; ay: number; cx: number; cy: number }
 	| { mode: 'move'; id: number; sx: number; sy: number; ox: number; oy: number; moved: boolean; dx: number; dy: number }
+	| {
+			mode: 'plant';
+			id: number;
+			plotId: number;
+			sx: number;
+			sy: number;
+			ox: number;
+			oy: number;
+			dx: number;
+			dy: number;
+			moved: boolean;
+	  }
 	| {
 			mode: 'resize';
 			id: number;
@@ -122,6 +141,20 @@ function cornerAt(px: number, py: number): { plot: PlotView; corner: 'nw' | 'ne'
 	return null;
 }
 
+// Planting band of the selected plot under a screen point — bands are
+// draggable to reposition rows within the bed.
+function bandAt(px: number, py: number): { plot: PlotView; band: PlantingView } | null {
+	if (selectedId == null) return null;
+	const p = plots.find((q) => q.id === selectedId);
+	if (!p) return null;
+	const w = toWorld(px, py);
+	for (const pl of p.plantings) {
+		if (w.x >= p.x + pl.fx && w.x < p.x + pl.fx + pl.fw && w.y >= p.y + pl.fy && w.y < p.y + pl.fy + pl.fh)
+			return { plot: p, band: pl };
+	}
+	return null;
+}
+
 function overlapsAny(x: number, y: number, w: number, h: number, ignoreId: number): PlotView | null {
 	for (const p of plots) {
 		if (p.id === ignoreId) continue;
@@ -147,6 +180,7 @@ function dragRect(d: Drag): { x: number; y: number; w: number; h: number; ignore
 		if (!p) return null;
 		return { x: Math.max(0, d.ox + d.dx), y: Math.max(0, d.oy + d.dy), w: p.w, h: p.h, ignoreId: d.id };
 	}
+	if (d.mode === 'plant') return null;
 	return { x: Math.max(0, d.ox), y: Math.max(0, d.oy), w: d.ow, h: d.oh, ignoreId: d.id };
 }
 
@@ -307,26 +341,33 @@ function draw() {
 			ctx.lineTo(X + W, fy);
 			ctx.stroke();
 		}
-		// planting bands (stacked vertically, emoji grid per planting)
-		let usedRows = 0;
+		// planting bands at their anchors (server-computed footprints)
 		for (const pl of p.plantings) {
-			const cols = Math.max(1, Math.floor(p.w / pl.spacing));
-			const maxRows = Math.max(0, Math.floor((p.h - usedRows * pl.spacing) / pl.spacing));
-			const rows = Math.max(0, Math.min(Math.ceil(pl.quantity / cols), maxRows));
+			const bx = X + pl.fx * s,
+				by = Y + pl.fy * s,
+				bw = pl.fw * s,
+				bh = pl.fh * s;
+			const cols = Math.max(1, Math.floor(pl.fw / pl.spacing));
+			const rows = Math.max(0, Math.min(Math.ceil(pl.quantity / cols), Math.floor(pl.fh / pl.spacing)));
 			const cell = pl.spacing * s;
 			for (let r = 0; r < rows; r++) {
 				for (let c = 0; c < cols; c++) {
 					const n = r * cols + c;
 					if (n >= pl.quantity) break;
-					const ex = X + (c + 0.5) * cell;
-					const ey = Y + ((usedRows + r) * pl.spacing + 0.5) * s;
 					ctx.font = `${Math.max(8, Math.min(28, cell * 0.75))}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
-					ctx.fillText(pl.emoji, ex, ey);
+					ctx.fillText(pl.emoji, bx + (c + 0.5) * cell, by + (r + 0.5) * cell);
 				}
 			}
-			usedRows += rows;
+			// selected plot: dashed outlines mark bands as grabbable targets
+			if (p.id === selectedId) {
+				ctx.setLineDash([4, 3]);
+				ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+				ctx.lineWidth = 1.5;
+				ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+				ctx.setLineDash([]);
+			}
 		}
 		// border + labels
 		const sel = p.id === selectedId;
@@ -363,6 +404,32 @@ function draw() {
 
 	// drag ghost: green = placeable, red = blocked (negative coords or overlap)
 	if (drag) {
+		const dg = drag;
+		if (dg.mode === 'plant') {
+			const p = plots.find((q) => q.id === dg.plotId);
+			const pl = p?.plantings.find((q) => q.id === dg.id);
+			if (p && pl) {
+				const tx = Math.max(0, Math.min(p.w - pl.fw, pl.fx + dg.dx));
+				const ty = Math.max(0, Math.min(p.h - pl.fh, pl.fy + dg.dy));
+				const clash = p.plantings.find(
+					(q) => q.id !== dg.id && tx < q.fx + q.fw && q.fx < tx + pl.fw && ty < q.fy + q.fh && q.fy < ty + pl.fh
+				);
+			const a = toScreen(p.x + tx, p.y + ty);
+			const col = clash ? '#ef4444' : '#22c55e';
+			ctx.fillStyle = clash ? 'rgba(239,68,68,0.22)' : 'rgba(34,197,94,0.22)';
+			ctx.fillRect(a.x, a.y, pl.fw * s, pl.fh * s);
+			ctx.setLineDash([6, 4]);
+			ctx.strokeStyle = col;
+			ctx.lineWidth = 2;
+			ctx.strokeRect(a.x + 0.5, a.y + 0.5, pl.fw * s - 1, pl.fh * s - 1);
+			ctx.setLineDash([]);
+			ctx.fillStyle = col;
+			ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+			ctx.textAlign = 'left';
+			ctx.textBaseline = 'top';
+			ctx.fillText(clash ? `overlaps ${clash.name}` : `${pl.name} → (${tx}, ${ty})`, a.x + 6, a.y + 6);
+		}
+	} else {
 		const r = dragRect(drag);
 		if (r) {
 			const a = toScreen(r.x, r.y);
@@ -389,6 +456,7 @@ function draw() {
 					: `${r.w}×${r.h} ft at (${r.x}, ${r.y})`;
 			ctx.fillText(label, a.x + 6, a.y + 6);
 		}
+	}
 	}
 	// north indicator — screen-fixed compass rose, garden north is up
 	if (cw > 140 && ch > 140) {
@@ -450,6 +518,24 @@ function onPointerDown(e: PointerEvent) {
 		draw();
 		return;
 	}
+	// planting bands of the selected plot are draggable within the bed
+	const band = bandAt(px, py);
+	if (band) {
+		drag = {
+			mode: 'plant',
+			id: band.band.id,
+			plotId: band.plot.id,
+			sx: px,
+			sy: py,
+			ox: band.band.fx,
+			oy: band.band.fy,
+			dx: 0,
+			dy: 0,
+			moved: false
+		};
+		draw();
+		return;
+	}
 	const w = toWorld(px, py);
 	const hit = hitTest(w.x, w.y);
 	if (hit) {
@@ -465,6 +551,7 @@ function onPointerMove(e: PointerEvent) {
 		py = e.offsetY;
 	if (!drag) {
 		hoverCorner = cornerAt(px, py)?.corner ?? null;
+		hoverPlanting = bandAt(px, py) !== null;
 		return;
 	}
 	if (drag.mode === 'pan') {
@@ -478,6 +565,10 @@ function onPointerMove(e: PointerEvent) {
 	} else if (drag.mode === 'move') {
 		drag.dx = Math.max(-drag.ox, Math.round((px - drag.sx) / view.scale));
 		drag.dy = Math.max(-drag.oy, Math.round((py - drag.sy) / view.scale));
+		if (drag.dx !== 0 || drag.dy !== 0) drag.moved = true;
+	} else if (drag.mode === 'plant') {
+		drag.dx = Math.round((px - drag.sx) / view.scale);
+		drag.dy = Math.round((py - drag.sy) / view.scale);
 		if (drag.dx !== 0 || drag.dy !== 0) drag.moved = true;
 	} else if (drag.mode === 'resize') {
 		const w = toWorld(px, py);
@@ -524,6 +615,12 @@ function onPointerUp(e: PointerEvent) {
 		else onmoved(d.id, Math.max(0, d.ox + d.dx), Math.max(0, d.oy + d.dy));
 	} else if (d.mode === 'resize') {
 		onresized(d.id, Math.max(0, d.ox), Math.max(0, d.oy), d.ow, d.oh);
+	} else if (d.mode === 'plant') {
+		const p = plots.find((q) => q.id === d.plotId);
+		const pl = p?.plantings.find((q) => q.id === d.id);
+		if (p && pl && d.moved) {
+			onplantmoved(d.id, Math.max(0, Math.min(p.w - pl.fw, d.ox + d.dx)), Math.max(0, Math.min(p.h - pl.fh, d.oy + d.dy)));
+		} else if (!d.moved) onselect(d.plotId);
 	}
 	draw();
 }
@@ -584,7 +681,7 @@ $effect(() => {
 
 // cursor feedback
 const cursor = $derived(
-	spaceDown ? 'grab' : hoverCorner === 'nw' || hoverCorner === 'se' ? 'nwse-resize' : hoverCorner ? 'nesw-resize' : 'crosshair'
+	spaceDown || hoverPlanting ? 'grab' : hoverCorner === 'nw' || hoverCorner === 'se' ? 'nwse-resize' : hoverCorner ? 'nesw-resize' : 'crosshair'
 );
 </script>
 

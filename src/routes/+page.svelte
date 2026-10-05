@@ -14,6 +14,10 @@ type PlantingView = {
 	quantity: number;
 	spacing: number;
 	plantedOn: string;
+	fx: number;
+	fy: number;
+	fw: number;
+	fh: number;
 };
 type PlotView = {
 	id: number;
@@ -90,6 +94,12 @@ function onResized(id: number, x: number, y: number, w: number, h: number) {
 		.catch((e) => showToast(String(e)));
 }
 
+function onPlantMoved(id: number, x: number, y: number) {
+	api(`/api/plantings/${id}`, { method: 'PATCH', body: JSON.stringify({ x, y }) })
+		.then(refresh)
+		.catch((e) => showToast(String(e)));
+}
+
 function onSelect(id: number | null) {
 	selectedId = id;
 }
@@ -117,6 +127,7 @@ const createClash = $derived(
 		oncreated={onCreated}
 		onmoved={onMoved}
 		onresized={onResized}
+		onplantmoved={onPlantMoved}
 		onselect={onSelect}
 	/>
 </div>

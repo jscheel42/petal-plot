@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { and, asc, eq, gte, inArray, isNull, lt, lte, or, gt } from 'drizzle-orm';
 import { getDb, todayISO } from '#lib/server/db';
+import { autoPlace, footprint, rectsOverlap, type Rect } from '#lib/server/layout';
 import { garden, plant, planting, plot } from '#lib/server/schema';
 import type { RequestHandler } from './$types';
 
@@ -14,12 +15,6 @@ function isInt(v: unknown): v is number {
 	return typeof v === 'number' && Number.isInteger(v);
 }
 
-function rectsOverlap(
-	a: { x: number; y: number; w: number; h: number },
-	b: { x: number; y: number; w: number; h: number }
-): boolean {
-	return a.x < b.x + b.w && b.x < a.x + b.w && a.y < b.y + b.h && b.y < a.y + b.h;
-}
 
 // GET ?asof=YYYY-MM-DD — plots with plantings active on that date + rotation badges.
 export const GET: RequestHandler = async ({ params, url }) => {
@@ -45,7 +40,9 @@ export const GET: RequestHandler = async ({ params, url }) => {
 						emoji: plant.emoji,
 						quantity: planting.quantity,
 						spacing: plant.spacing,
-						plantedOn: planting.plantedOn
+						plantedOn: planting.plantedOn,
+						x: planting.x,
+						y: planting.y,
 					})
 					.from(planting)
 					.innerJoin(plant, eq(planting.plantId, plant.id))
@@ -84,12 +81,23 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		asof,
 		plots: plots.map((p) => {
 			const own = actives.filter((a) => a.plotId === p.id);
-			const conflict = own.find((a) =>
-				prevs.find((v) => v.plotId === p.id && v.family === a.family)
-			);
+			// Bands: explicit anchors clamped into the plot; unpositioned rows
+			// auto-stack into the first free slot (id order).
+			const placed: Rect[] = [];
+			const bands = own.map((a) => {
+				const fp = footprint(a.quantity, a.spacing, p.w);
+				let pos =
+					a.x != null && a.y != null
+						? { x: Math.max(0, Math.min(a.x, p.w - fp.w)), y: Math.max(0, Math.min(a.y, p.h - fp.h)) }
+						: autoPlace(p.w, p.h, fp, placed);
+				if (!pos) pos = { x: 0, y: Math.max(0, p.h - fp.h) }; // full plot: park at bottom, server validated on write
+				placed.push({ x: pos.x, y: pos.y, w: fp.w, h: fp.h });
+				return { ...a, fx: pos.x, fy: pos.y, fw: fp.w, fh: fp.h };
+			});
+			const conflict = own.find((a) => prevs.find((v) => v.plotId === p.id && v.family === a.family));
 			return {
 				...p,
-				plantings: own,
+				plantings: bands,
 				warning: conflict
 					? `had ${conflict.family.toLowerCase()} last year (${conflict.name}, planted ${conflict.plantedOn})`
 					: null

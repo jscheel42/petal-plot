@@ -38,6 +38,10 @@ let {
 			emoji: string;
 			quantity: number;
 			plantedOn: string;
+			fx: number;
+			fy: number;
+			fw: number;
+			fh: number;
 		}[];
 		warning: string | null;
 	};
@@ -146,13 +150,17 @@ async function removePlot() {
 		{/if}
 
 		<h3 class="mb-1 mt-4 font-semibold">Current plantings</h3>
+		<p class="mb-1 text-xs text-stone-400">Drag a dashed band on the map to reposition rows.</p>
 		{#if selected.plantings.length === 0}
 			<p class="text-stone-400">Nothing planted here right now.</p>
 		{:else}
 			<ul class="space-y-1">
 				{#each selected.plantings as pl (pl.id)}
 					<li class="flex items-center justify-between rounded-md bg-stone-50 px-2 py-1.5">
-						<span>{pl.emoji} {pl.name} × {pl.quantity}</span>
+						<span>
+							{pl.emoji} {pl.name} × {pl.quantity}
+							<span class="text-xs text-stone-400">at ({pl.fx}, {pl.fy}) {pl.fw}×{pl.fh} ft</span>
+						</span>
 						<span class="text-stone-400">since {pl.plantedOn}</span>
 						<button
 							class="rounded bg-green-100 px-2 py-0.5 text-green-800 hover:bg-green-200"

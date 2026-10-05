@@ -51,6 +51,9 @@ export const planting = sqliteTable(
 			.notNull()
 			.references(() => plant.id, { onDelete: 'cascade' }),
 		quantity: integer('quantity').notNull(),
+		// Position within plot, whole feet from plot origin; null = auto-stack.
+		x: integer('x'),
+		y: integer('y'),
 		plantedOn: text('planted_on').notNull(),
 		endedOn: text('ended_on'),
 		notes: text('notes')

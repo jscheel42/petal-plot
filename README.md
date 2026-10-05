@@ -70,6 +70,7 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 | Create plot | drag on empty grid |
 | Open panel | click a plot |
 | Move / resize | drag plot body / corner handles |
+| Reposition plantings | select plot → drag its dashed band (whole-feet snap; server validates bounds + band overlap) |
 | Replay | 🕰️ slider in the header |
 | North | compass rose, top-left (garden north = up) |
 | Labels | 🏷️ button or `l` key toggles `Name · W×Hft` labels — **off by default**, choice persisted; ⚠️ warnings always shown |
@@ -78,10 +79,10 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 ## Layout
 
 ```
-src/lib/server/    schema.ts · db.ts · rotation.ts · test-db.ts
+src/lib/server/    schema.ts · db.ts · rotation.ts · layout.ts · test-db.ts
 src/routes/api/    gardens · plots · plantings · plants catalog
 src/lib/components/ Canvas.svelte · DetailPanel.svelte
-drizzle/           SQL migrations (0000 schema, 0001 seed) — applied by wrangler
+drizzle/           SQL migrations (0000 schema, 0001 seed, 0002 planting position) — applied by wrangler
 scripts/           one-off SQL (Cloud Run data port)
 wrangler.jsonc     worker + D1 binding + assets config
 ```

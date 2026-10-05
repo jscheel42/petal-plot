@@ -3,7 +3,7 @@
 // proxy binding. Boots wrangler's platform proxy (ephemeral local D1, same
 // code path the adapter uses in `npm run dev`) and applies the real
 // migrations + seed SQL on first use.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { getPlatformProxy } from 'wrangler';
 import type { D1Database } from '@cloudflare/workers-types';
 import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
@@ -38,8 +38,10 @@ async function init(): Promise<TestDb> {
 		remoteBindings: false
 	});
 	const d1 = proxy.env.DB;
-	await execSql(d1, 'drizzle/0000_curvy_masque.sql');
-	await execSql(d1, 'drizzle/0001_seed.sql');
+	// Apply every migration in filename order (0000, 0001, 0002, …).
+	for (const f of readdirSync('drizzle').filter((f) => f.endsWith('.sql')).sort()) {
+		await execSql(d1, `drizzle/${f}`);
+	}
 	return { d1, db: drizzle(d1, { schema }), dispose: () => proxy.dispose() };
 }
 

@@ -5,7 +5,7 @@ import { testDb } from '#lib/server/test-db';
 import { GET as listGardens, POST as createGarden } from './gardens/+server.ts';
 import { GET as getPlots, POST as createPlot } from './gardens/[id]/plots/+server.ts';
 import { POST as addPlanting } from './plots/[id]/plantings/+server.ts';
-import { PATCH as harvest } from './plantings/[id]/+server.ts';
+import { PATCH as patchPlanting } from './plantings/[id]/+server.ts';
 import { GET as getHistory } from './plots/[id]/history/+server.ts';
 
 // Alias-resolved harness boots the ephemeral D1 + applies migrations/seed.
@@ -114,7 +114,7 @@ describe('planting lifecycle', () => {
 	});
 
 	it('harvest ends the planting and shows in history', async () => {
-		const h = await call<{ planting: { endedOn: string | null } }>(harvest as Handler, {
+		const h = await call<{ planting: { endedOn: string | null } }>(patchPlanting as Handler, {
 			params: { id: String(plantingId) },
 			method: 'PATCH',
 			body: {}
@@ -137,11 +137,120 @@ describe('planting lifecycle', () => {
 	});
 
 	it('rejects harvest with endedOn before plantedOn', async () => {
-		const r = await call(harvest as Handler, {
+		const r = await call(patchPlanting as Handler, {
 			params: { id: String(plantingId) },
 			method: 'PATCH',
 			body: { endedOn: '2000-01-01' }
 		});
 		expect(r.status).toBe(404);
+	});
+});
+
+// Band positioning: explicit anchors validated server-side, auto-stack
+// assigns integer-ft slots, PATCH moves re-checked against other bands.
+describe('planting positions', () => {
+	let posPlotId = 0;
+	let kaleId = 0;
+	let pepperId = 0;
+
+	it('creates a dedicated 4×8 bed', async () => {
+		const r = await call<{ plot: { id: number } }>(createPlot as Handler, {
+			params: { id: String(gardenId) },
+			body: { name: 'PosBed', type: 'raised_bed', x: 20, y: 0, w: 4, h: 8 }
+		});
+		expect(r.status).toBe(201);
+		posPlotId = r.json.plot.id;
+	});
+
+	it('stores explicit x,y', async () => {
+		const r = await call<{ planting: { id: number; x: number | null; y: number | null } }>(addPlanting as Handler, {
+			params: { id: String(posPlotId) },
+			body: { plantId: 5, quantity: 4, plantedOn: '2026-06-01', x: 0, y: 2 }
+		});
+		expect(r.status).toBe(201);
+		expect(r.json.planting.x).toBe(0);
+		expect(r.json.planting.y).toBe(2);
+		kaleId = r.json.planting.id;
+	});
+
+	it('rejects out-of-bounds with per-field messages', async () => {
+		const r = await call<{ error: string }>(addPlanting as Handler, {
+			params: { id: String(posPlotId) },
+			body: { plantId: 2, quantity: 8, plantedOn: '2026-06-01', x: 9, y: -1 }
+		});
+		expect(r.status).toBe(400);
+		expect(r.json.error).toContain('x:');
+		expect(r.json.error).toContain('y:');
+		expect(r.json.error).toContain('max x is 0');
+	});
+
+	it('rejects explicit anchor overlapping an existing band', async () => {
+		const r = await call<{ error: string }>(addPlanting as Handler, {
+			params: { id: String(posPlotId) },
+			body: { plantId: 2, quantity: 4, plantedOn: '2026-06-01', x: 0, y: 2 }
+		});
+		expect(r.status).toBe(409);
+		expect(r.json.error).toContain('overlaps');
+	});
+
+	it('auto-stacks unpositioned plantings into free slots', async () => {
+		const r = await call<{ planting: { id: number; x: number | null; y: number | null } }>(addPlanting as Handler, {
+			params: { id: String(posPlotId) },
+			body: { plantId: 2, quantity: 8, plantedOn: '2026-06-01' }
+		});
+		expect(r.status).toBe(201);
+		// kale 4×1 at y=2, pepper 4×2 → first free scan row is y=0
+		expect(r.json.planting.x).toBe(0);
+		expect(r.json.planting.y).toBe(0);
+		pepperId = r.json.planting.id;
+	});
+
+	it('GET returns band footprints', async () => {
+		const r = await call<{
+			plots: { id: number; plantings: { id: number; fx: number; fy: number; fw: number; fh: number }[] }[];
+		}>(getPlots as Handler, {
+			params: { id: String(gardenId) },
+			query: '?asof=2026-06-10'
+		});
+		const bed = r.json.plots.find((p) => p.id === posPlotId);
+		const kale = bed?.plantings.find((x) => x.id === kaleId);
+		const pepper = bed?.plantings.find((x) => x.id === pepperId);
+		expect(kale).toMatchObject({ fx: 0, fy: 2, fw: 4, fh: 1 });
+		expect(pepper).toMatchObject({ fx: 0, fy: 0, fw: 4, fh: 2 });
+	});
+
+	it('PATCH moves a planting and rejects overlaps/bad input', async () => {
+		const ok = await call<{ planting: { x: number | null; y: number | null } }>(patchPlanting as Handler, {
+			params: { id: String(pepperId) },
+			method: 'PATCH',
+			body: { x: 0, y: 3 }
+		});
+		expect(ok.status).toBe(200);
+		expect(ok.json.planting).toMatchObject({ x: 0, y: 3 });
+
+	const clash = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pepperId) },
+			method: 'PATCH',
+			body: { x: 0, y: 2 }
+		});
+		expect(clash.status).toBe(409);
+
+		const bad = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pepperId) },
+			method: 'PATCH',
+			body: { x: 1.5, y: 0 }
+		});
+		expect(bad.status).toBe(400);
+		expect(bad.json.error).toContain('whole number');
+	});
+
+	it('harvest still works without x,y', async () => {
+		const r = await call<{ planting: { endedOn: string | null } }>(patchPlanting as Handler, {
+			params: { id: String(kaleId) },
+			method: 'PATCH',
+			body: {}
+		});
+		expect(r.status).toBe(200);
+		expect(r.json.planting.endedOn).not.toBeNull();
 	});
 });
