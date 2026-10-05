@@ -44,6 +44,7 @@ let {
 	onselect: (id: number | null) => void;
 } = $props();
 
+let hoverCorner = $state<'nw' | 'ne' | 'sw' | 'se' | null>(null);
 let canvas = $state<HTMLCanvasElement | undefined>();
 let view = $state({ vx: 0, vy: 0, scale: 26 }); // px per ft
 let drag = $state<Drag | null>(null);
@@ -91,6 +92,27 @@ function hitTest(wx: number, wy: number): PlotView | null {
 	for (let i = plots.length - 1; i >= 0; i--) {
 		const p = plots[i];
 		if (wx >= p.x && wx < p.x + p.w && wy >= p.y && wy < p.y + p.h) return p;
+	}
+	return null;
+}
+
+// Corner grab radius in screen px — generous so corners are easy targets.
+const CORNER_PX = 14;
+function cornerAt(px: number, py: number): { plot: PlotView; corner: 'nw' | 'ne' | 'sw' | 'se' } | null {
+	if (selectedId == null) return null;
+	const p = plots.find((q) => q.id === selectedId);
+	if (!p) return null;
+	const { x: X, y: Y } = toScreen(p.x, p.y);
+	const W = p.w * view.scale,
+		H = p.h * view.scale;
+	const corners: ['nw' | 'ne' | 'sw' | 'se', number, number][] = [
+		['nw', X, Y],
+		['ne', X + W, Y],
+		['sw', X, Y + H],
+		['se', X + W, Y + H]
+	];
+	for (const [corner, cx, cy] of corners) {
+		if (Math.abs(px - cx) <= CORNER_PX && Math.abs(py - cy) <= CORNER_PX) return { plot: p, corner };
 	}
 	return null;
 }
@@ -164,21 +186,27 @@ function draw() {
 	const ctx = el.getContext('2d');
 	if (!ctx) return;
 	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-	ctx.fillStyle = '#f6f7f4';
+	// invalid half-plane (x,y < 0): black void, no gridlines
+	ctx.fillStyle = '#000000';
 	ctx.fillRect(0, 0, cw, ch);
 
 	const s = view.scale;
-	// grid
+	const X0 = Math.max(0, Math.round((0 - view.vx) * s));
+	const Y0 = Math.max(0, Math.round((0 - view.vy) * s));
+	ctx.fillStyle = '#f6f7f4';
+	ctx.fillRect(X0, Y0, cw - X0, ch - Y0);
+
+	// grid (valid region only)
 	ctx.lineWidth = 1;
-	const minX = Math.floor(view.vx),
+	const minX = Math.max(0, Math.floor(view.vx)),
 		maxX = Math.ceil(view.vx + cw / s);
-	const minY = Math.floor(view.vy),
+	const minY = Math.max(0, Math.floor(view.vy)),
 		maxY = Math.ceil(view.vy + ch / s);
 	for (let gx = minX; gx <= maxX; gx++) {
 		const X = Math.round((gx - view.vx) * s) + 0.5;
 		ctx.strokeStyle = gx % 5 === 0 ? '#d6d3d1' : '#e7e5e4';
 		ctx.beginPath();
-		ctx.moveTo(X, 0);
+		ctx.moveTo(X, Y0);
 		ctx.lineTo(X, ch);
 		ctx.stroke();
 	}
@@ -186,29 +214,8 @@ function draw() {
 		const Y = Math.round((gy - view.vy) * s) + 0.5;
 		ctx.strokeStyle = gy % 5 === 0 ? '#d6d3d1' : '#e7e5e4';
 		ctx.beginPath();
-		ctx.moveTo(0, Y);
+		ctx.moveTo(X0, Y);
 		ctx.lineTo(cw, Y);
-		ctx.stroke();
-	}
-
-	// invalid zone: plots must sit at x,y >= 0 — shade + mark the forbidden half-plane
-	ctx.fillStyle = 'rgba(239,68,68,0.05)';
-	if (view.vx < 0) ctx.fillRect(0, 0, Math.min(cw, -view.vx * s), ch);
-	if (view.vy < 0) ctx.fillRect(0, 0, cw, Math.min(ch, -view.vy * s));
-	ctx.strokeStyle = 'rgba(239,68,68,0.4)';
-	ctx.lineWidth = 1;
-	const ax0 = Math.round((0 - view.vx) * s) + 0.5;
-	const ay0 = Math.round((0 - view.vy) * s) + 0.5;
-	if (ax0 > 0 && ax0 < cw) {
-		ctx.beginPath();
-		ctx.moveTo(ax0, 0);
-		ctx.lineTo(ax0, ch);
-		ctx.stroke();
-	}
-	if (ay0 > 0 && ay0 < ch) {
-		ctx.beginPath();
-		ctx.moveTo(0, ay0);
-		ctx.lineTo(cw, ay0);
 		ctx.stroke();
 	}
 
@@ -276,7 +283,7 @@ function draw() {
 				[X, Y + H],
 				[X + W, Y + H]
 			]) {
-				ctx.fillRect(hx - 4, hy - 4, 8, 8);
+				ctx.fillRect(hx - 6, hy - 6, 12, 12);
 			}
 		}
 	}
@@ -323,33 +330,25 @@ function onPointerDown(e: PointerEvent) {
 		drag = { mode: 'pan', sx: px, sy: py, v0: { ...view } };
 		return;
 	}
+	// corners of the selected plot win over hitTest — near shared edges with
+	// adjacent plots, hitTest would otherwise grab the neighbor and move it
+	// into the selected plot (phantom overlap collisions).
+	const ch = cornerAt(px, py);
+	if (ch) {
+		drag = {
+			mode: 'resize',
+			id: ch.plot.id,
+			corner: ch.corner,
+			ox: ch.plot.x,
+			oy: ch.plot.y,
+			ow: ch.plot.w,
+			oh: ch.plot.h
+		};
+		draw();
+		return;
+	}
 	const w = toWorld(px, py);
 	const hit = hitTest(w.x, w.y);
-	if (hit && hit.id === selectedId) {
-		const { x: X, y: Y } = toScreen(hit.x, hit.y);
-		const W = hit.w * view.scale,
-			H = hit.h * view.scale;
-		const corners: [string, number, number][] = [
-			['nw', X, Y],
-			['ne', X + W, Y],
-			['sw', X, Y + H],
-			['se', X + W, Y + H]
-		];
-		for (const [corner, cx, cy] of corners) {
-			if (Math.abs(px - cx) <= 9 && Math.abs(py - cy) <= 9) {
-				drag = {
-					mode: 'resize',
-					id: hit.id,
-					corner: corner as 'nw' | 'ne' | 'sw' | 'se',
-					ox: hit.x,
-					oy: hit.y,
-					ow: hit.w,
-					oh: hit.h
-				};
-				return;
-			}
-		}
-	}
 	if (hit) {
 		drag = { mode: 'move', id: hit.id, sx: px, sy: py, ox: hit.x, oy: hit.y, moved: false, dx: 0, dy: 0 };
 	} else {
@@ -359,9 +358,12 @@ function onPointerDown(e: PointerEvent) {
 }
 
 function onPointerMove(e: PointerEvent) {
-	if (!drag) return;
 	const px = e.offsetX,
 		py = e.offsetY;
+	if (!drag) {
+		hoverCorner = cornerAt(px, py)?.corner ?? null;
+		return;
+	}
 	if (drag.mode === 'pan') {
 		view.vx = drag.v0.vx - (px - drag.sx) / drag.v0.scale;
 		view.vy = drag.v0.vy - (py - drag.sy) / drag.v0.scale;
@@ -467,7 +469,9 @@ $effect(() => {
 });
 
 // cursor feedback
-const cursor = $derived(spaceDown ? 'grab' : 'crosshair');
+const cursor = $derived(
+	spaceDown ? 'grab' : hoverCorner === 'nw' || hoverCorner === 'se' ? 'nwse-resize' : hoverCorner ? 'nesw-resize' : 'crosshair'
+);
 </script>
 
 <canvas
