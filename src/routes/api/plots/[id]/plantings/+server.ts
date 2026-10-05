@@ -23,7 +23,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	if (!Number.isInteger(quantity) || quantity < 1) {
 		return json({ error: 'quantity must be a positive integer' }, { status: 400 });
 	}
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(plantedOn) || plantedOn > todayISO()) {
+	// clients send LOCAL dates; allow +1 day so UTC-positive zones aren't
+	// rejected at local midnight while the server still sits on UTC.
+	const maxDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(plantedOn) || plantedOn > maxDate) {
 		return json({ error: 'plantedOn must be a valid date, not in the future' }, { status: 400 });
 	}
 

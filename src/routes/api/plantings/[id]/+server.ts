@@ -74,7 +74,10 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	}
 
 	const endedOn = typeof b.endedOn === 'string' ? b.endedOn : todayISO();
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(endedOn) || endedOn > todayISO()) {
+	// clients send LOCAL dates; allow +1 day so UTC-positive zones aren't
+	// rejected at local midnight while the server still sits on UTC.
+	const maxDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(endedOn) || endedOn > maxDate) {
 		return json({ error: 'endedOn must be a valid date, not in the future' }, { status: 400 });
 	}
 	const row = await db

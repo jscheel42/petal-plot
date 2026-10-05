@@ -254,3 +254,67 @@ describe('planting positions', () => {
 		expect(r.json.planting.endedOn).not.toBeNull();
 	});
 });
+
+// endedOn is the harvest day and EXCLUSIVE: the planting must vanish from
+// asof=that day. Clients send LOCAL dates (server clock is UTC).
+describe('harvest dates', () => {
+	const local = (daysAgo: number) => {
+		const d = new Date();
+		d.setDate(d.getDate() - daysAgo);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	};
+	let bedId = 0;
+	let pId = 0;
+
+	it('sets up a bed with a 2-day-old planting', async () => {
+		const bed = await call<{ plot: { id: number } }>(createPlot as Handler, {
+			params: { id: String(gardenId) },
+			body: { name: 'HarvestBed', type: 'raised_bed', x: 30, y: 0, w: 4, h: 4 }
+		});
+		expect(bed.status).toBe(201);
+		bedId = bed.json.plot.id;
+		const p = await call<{ planting: { id: number } }>(addPlanting as Handler, {
+			params: { id: String(bedId) },
+			body: { plantId: 5, quantity: 1, plantedOn: local(2) }
+		});
+		expect(p.status).toBe(201);
+		pId = p.json.planting.id;
+	});
+
+	it('harvest with local today removes the band from today, keeps yesterday', async () => {
+		const h = await call<{ planting: { endedOn: string | null } }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { endedOn: local(0) }
+		});
+		expect(h.status).toBe(200);
+		expect(h.json.planting.endedOn).toBe(local(0));
+
+		const today = await call<{ plots: { id: number; plantings: { id: number }[] }[] }>(getPlots as Handler, {
+			params: { id: String(gardenId) },
+			query: `?asof=${local(0)}`
+		});
+		expect(today.json.plots.find((p) => p.id === bedId)?.plantings.some((a) => a.id === pId)).toBe(false);
+
+		const yesterday = await call<{ plots: { id: number; plantings: { id: number }[] }[] }>(getPlots as Handler, {
+			params: { id: String(gardenId) },
+			query: `?asof=${local(1)}`
+		});
+		expect(yesterday.json.plots.find((p) => p.id === bedId)?.plantings.some((a) => a.id === pId)).toBe(true);
+	});
+
+	it('accepts a UTC-tomorrow date from UTC-positive clients', async () => {
+		const tomorrow = local(-1);
+		const p = await call<{ planting: { id: number } }>(addPlanting as Handler, {
+			params: { id: String(bedId) },
+			body: { plantId: 7, quantity: 1, plantedOn: tomorrow }
+		});
+		expect(p.status).toBe(201);
+		const h = await call(patchPlanting as Handler, {
+			params: { id: String(p.json.planting.id) },
+			method: 'PATCH',
+			body: { endedOn: tomorrow }
+		});
+		expect(h.status).toBe(200);
+	});
+});

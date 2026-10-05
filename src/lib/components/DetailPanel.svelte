@@ -1,7 +1,7 @@
 <script lang="ts">
 // Right-side drawer for the selected plot: plant/harvest, history, delete.
 import { api } from '#lib/api';
-import { asOfDate } from '#lib/state.svelte.js';
+import { asOfDate, isoDaysAgo } from '#lib/state.svelte.js';
 
 
 type PlantRow = { id: number; name: string; family: string; emoji: string; spacing: number; sun: string };
@@ -110,7 +110,12 @@ async function plant() {
 
 async function harvest(plantingId: number, name: string) {
 	try {
-		await api(`/api/plantings/${plantingId}`, { method: 'PATCH', body: JSON.stringify({}) });
+		// explicit LOCAL today — server default is UTC and would roll to
+		// tomorrow in UTC-negative zones, keeping the band visible a day longer
+		await api(`/api/plantings/${plantingId}`, {
+			method: 'PATCH',
+			body: JSON.stringify({ endedOn: isoDaysAgo(0) })
+		});
 		showToast(`${name} harvested`);
 		refresh();
 		api<{ history: HistoryRow[] }>(`/api/plots/${selected.id}/history`).then((h) => (history = h.history));
