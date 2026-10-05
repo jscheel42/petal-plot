@@ -95,6 +95,7 @@ async function newGarden() {
 						<li>Side swipe / space + drag → pan</li>
 						<li>＋ − ⛶ ◎ buttons or + − 0 c keys → zoom / fit / center</li>
 						<li>Esc → close panels</li>
+						<li>North ↑ compass at top-left · view auto-saves per garden</li>
 						<li>Slider → replay any past date</li>
 					</ul>
 				</div>

@@ -50,6 +50,9 @@ let view = $state({ vx: 0, vy: 0, scale: 26 }); // px per ft
 let drag = $state<Drag | null>(null);
 let spaceDown = $state(false);
 let fittedFor = $state<number | null>(null);
+let positioned = $state(false); // view already placed on real data (or restored)
+let userTouched = $state(false); // user panned/zoomed → stop auto-fit, start persisting
+let saveT = 0;
 
 type Drag =
 	| { mode: 'pan'; sx: number; sy: number; v0: { vx: number; vy: number; scale: number } }
@@ -171,6 +174,7 @@ function fit(plotsToDraw: PlotView[]) {
 
 // Zoom anchored at a screen point; wheel, buttons, and keys all share this.
 function zoomAt(cx: number, cy: number, factor: number) {
+	userTouched = true;
 	const wx = cx / view.scale + view.vx,
 		wy = cy / view.scale + view.vy;
 	const ns = Math.min(160, Math.max(6, view.scale * factor));
@@ -191,9 +195,37 @@ function centerOnSelected() {
 	if (!el || selectedId == null) return;
 	const p = plots.find((q) => q.id === selectedId);
 	if (!p) return;
+	userTouched = true;
 	view.vx = p.x + p.w / 2 - el.clientWidth / view.scale / 2;
 	view.vy = p.y + p.h / 2 - el.clientHeight / view.scale / 2;
 	draw();
+}
+
+// View persists per garden so a reload keeps position + zoom.
+type SavedView = { vx: number; vy: number; scale: number };
+function saveView() {
+	if (gardenKey == null) return;
+	try {
+		localStorage.setItem(`petalPlot.view.${gardenKey}`, JSON.stringify({ vx: view.vx, vy: view.vy, scale: view.scale }));
+	} catch {
+		// storage blocked/full — persistence is best-effort
+	}
+}
+function loadView(): boolean {
+	if (gardenKey == null) return false;
+	try {
+		const raw = localStorage.getItem(`petalPlot.view.${gardenKey}`);
+		if (!raw) return false;
+		const v = JSON.parse(raw) as Partial<SavedView>;
+		if (typeof v.vx !== 'number' || typeof v.vy !== 'number' || typeof v.scale !== 'number') return false;
+		if (!Number.isFinite(v.vx) || !Number.isFinite(v.vy) || v.scale < 6 || v.scale > 160) return false;
+		view.vx = v.vx;
+		view.vy = v.vy;
+		view.scale = v.scale;
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function draw() {
@@ -344,6 +376,36 @@ function draw() {
 			ctx.fillText(label, a.x + 6, a.y + 6);
 		}
 	}
+	// north indicator — screen-fixed compass rose, garden north is up
+	if (cw > 140 && ch > 140) {
+		const cx = 30,
+			cy = 36;
+		ctx.save();
+		ctx.beginPath();
+		ctx.arc(cx, cy, 17, 0, Math.PI * 2);
+		ctx.fillStyle = 'rgba(255,255,255,0.88)';
+		ctx.fill();
+		ctx.strokeStyle = '#a8a29e';
+		ctx.lineWidth = 1.5;
+		ctx.stroke();
+		ctx.fillStyle = '#1c1917';
+		ctx.beginPath();
+		ctx.moveTo(cx, cy + 1);
+		ctx.lineTo(cx - 5, cy + 11);
+		ctx.lineTo(cx, cy + 7);
+		ctx.lineTo(cx + 5, cy + 11);
+		ctx.closePath();
+		ctx.fill();
+		ctx.font = '700 11px ui-sans-serif, system-ui, sans-serif';
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		ctx.fillText('N', cx, cy - 7);
+		ctx.restore();
+	}
+	if (userTouched) {
+		clearTimeout(saveT);
+		saveT = window.setTimeout(saveView, 250);
+	}
 }
 
 
@@ -392,6 +454,7 @@ function onPointerMove(e: PointerEvent) {
 		return;
 	}
 	if (drag.mode === 'pan') {
+		userTouched = true;
 		view.vx = drag.v0.vx - (px - drag.sx) / drag.v0.scale;
 		view.vy = drag.v0.vy - (py - drag.sy) / drag.v0.scale;
 	} else if (drag.mode === 'create') {
@@ -465,7 +528,6 @@ function onWheel(e: WheelEvent) {
 
 onMount(async () => {
 	await tick();
-	fit(plots);
 	window.addEventListener('keydown', (e) => {
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
 		if (e.code === 'Space') {
@@ -476,6 +538,7 @@ onMount(async () => {
 		} else if (e.key === '-') {
 			zoomStep(-1);
 		} else if (e.key === '0') {
+			userTouched = true;
 			fit(plots);
 		} else if (e.key === 'c') {
 			centerOnSelected();
@@ -486,12 +549,18 @@ onMount(async () => {
 	});
 });
 
-// redraw when data changes; re-fit when garden changes
+// Garden change: restore saved view, else fit. Plots load async — if the
+// first fit saw an empty garden, re-fit once the boxes arrive (unless the
+// user already took control of the view).
 $effect(() => {
 	void plots;
 	if (fittedFor !== gardenKey) {
 		fittedFor = gardenKey;
+		positioned = loadView();
+		if (!positioned) fit(plots);
+	} else if (!positioned && !userTouched && plots.length > 0) {
 		fit(plots);
+		positioned = true;
 	} else {
 		draw();
 	}
@@ -525,7 +594,10 @@ const cursor = $derived(
 	<button
 		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100"
 		title="Fit garden to screen (0)"
-		onclick={() => fit(plots)}>⛶</button>
+		onclick={() => {
+			userTouched = true;
+			fit(plots);
+		}}>⛶</button>
 	<button
 		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:text-stone-300"
 		title="Center on selected plot (c)"

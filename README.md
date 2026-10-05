@@ -71,6 +71,8 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 | Open panel | click a plot |
 | Move / resize | drag plot body / corner handles |
 | Replay | 🕰️ slider in the header |
+| North | compass rose, top-left (garden north = up) |
+| View memory | pan/zoom auto-saved per garden; reload restores it. First visit fits all plots |
 
 ## Layout
 
