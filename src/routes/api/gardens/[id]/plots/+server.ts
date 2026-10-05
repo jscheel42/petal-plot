@@ -104,27 +104,31 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const name = typeof b.name === 'string' && b.name.trim() ? b.name.trim() : null;
 	const type = typeof b.type === 'string' ? PLOT_TYPE_VALUES[b.type] : undefined;
 	const { x, y, w, h } = b;
-	if (
-		name === null ||
-		type === undefined ||
-		!isInt(x) ||
-		!isInt(y) ||
-		!isInt(w) ||
-		!isInt(h) ||
-		x < 0 ||
-		y < 0 ||
-		w < 1 ||
-		h < 1
-	) {
-		return json({ error: 'valid name, type, and x/y/w/h (integers, w/h >= 1) required' }, { status: 400 });
-	}
+	const problems: string[] = [];
+	if (name === null) problems.push('name: text required');
+	if (type === undefined)
+		problems.push(`type: must be one of in_ground, raised_bed, container (got ${JSON.stringify(b.type)})`);
+	if (!isInt(x)) problems.push(`x: whole number required (got ${JSON.stringify(x)})`);
+	else if (x < 0) problems.push(`x: must be 0 or greater (got ${x})`);
+	if (!isInt(y)) problems.push(`y: whole number required (got ${JSON.stringify(y)})`);
+	else if (y < 0) problems.push(`y: must be 0 or greater (got ${y})`);
+	if (!isInt(w)) problems.push(`w: whole number required (got ${JSON.stringify(w)})`);
+	else if (w < 1) problems.push(`w: must be 1 or greater (got ${w})`);
+	if (!isInt(h)) problems.push(`h: whole number required (got ${JSON.stringify(h)})`);
+	else if (h < 1) problems.push(`h: must be 1 or greater (got ${h})`);
+	if (problems.length > 0 || name === null || type === undefined)
+		return json({ error: problems.join('; ') || 'invalid plot' }, { status: 400 });
 	const db = getDb();
 	if (!(await db.select({ id: garden.id }).from(garden).where(eq(garden.id, gardenId)).get())) {
 		return json({ error: 'garden not found' }, { status: 404 });
 	}
 	const existing = await db.select().from(plot).where(eq(plot.gardenId, gardenId)).all();
 	const clash = existing.find((p) => rectsOverlap(p, { x, y, w, h }));
-	if (clash) return json({ error: `overlaps ${clash.name}` }, { status: 409 });
+	if (clash)
+		return json(
+			{ error: `overlaps "${clash.name}" at (${clash.x}, ${clash.y}) ${clash.w}×${clash.h} ft — drag somewhere else` },
+			{ status: 409 }
+		);
 
 	const row = await db
 		.insert(plot)

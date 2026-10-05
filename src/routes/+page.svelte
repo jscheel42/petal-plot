@@ -64,7 +64,7 @@ function onCreated(rect: { x: number; y: number; w: number; h: number }) {
 }
 
 async function submitCreate() {
-	if (!createRect || store.currentGardenId == null) return;
+	if (!createRect || store.currentGardenId == null || createClash) return;
 	try {
 		const r = await api<{ plot: PlotView }>(`/api/gardens/${store.currentGardenId}/plots`, {
 			method: 'POST',
@@ -95,6 +95,18 @@ function onSelect(id: number | null) {
 }
 
 const selected = $derived(plots.find((p) => p.id === selectedId) ?? null);
+
+const createClash = $derived(
+	createRect
+		? (plots.find(
+				(p) =>
+					createRect!.x < p.x + p.w &&
+					p.x < createRect!.x + createRect!.w &&
+					createRect!.y < p.y + p.h &&
+					p.y < createRect!.y + createRect!.h
+			) ?? null)
+		: null
+);
 </script>
 
 <div class="absolute inset-0">
@@ -113,9 +125,16 @@ const selected = $derived(plots.find((p) => p.id === selectedId) ?? null);
 	<div class="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
 		<div class="w-80 rounded-xl bg-white p-5 shadow-xl">
 			<h2 class="mb-3 text-lg font-semibold">New plot</h2>
-			<p class="mb-3 text-sm text-stone-500">
-				{createRect.w}×{createRect.h} ft at ({createRect.x}, {createRect.y})
-			</p>
+			{#if createClash}
+				<p class="mb-3 text-sm font-medium text-red-600">
+					Overlaps "{createClash.name}" at ({createClash.x}, {createClash.y})
+					{createClash.w}×{createClash.h} ft — cancel and drag somewhere else
+				</p>
+			{:else}
+				<p class="mb-3 text-sm text-green-700">
+					✓ {createRect.w}×{createRect.h} ft at ({createRect.x}, {createRect.y})
+				</p>
+			{/if}
 			<label class="mb-3 block text-sm">
 				Name
 				<input
@@ -137,7 +156,10 @@ const selected = $derived(plots.find((p) => p.id === selectedId) ?? null);
 					Cancel
 				</button>
 				<button
-					class="rounded bg-green-700 px-3 py-1 text-sm text-white hover:bg-green-800"
+					class="rounded px-3 py-1 text-sm text-white {createClash
+						? 'cursor-not-allowed bg-stone-300'
+						: 'bg-green-700 hover:bg-green-800'}"
+					disabled={createClash !== null}
 					onclick={submitCreate}
 				>
 					Create

@@ -53,7 +53,7 @@ let fittedFor = $state<number | null>(null);
 type Drag =
 	| { mode: 'pan'; sx: number; sy: number; v0: { vx: number; vy: number; scale: number } }
 	| { mode: 'create'; ax: number; ay: number; cx: number; cy: number }
-	| { mode: 'move'; id: number; sx: number; sy: number; ox: number; oy: number; moved: boolean }
+	| { mode: 'move'; id: number; sx: number; sy: number; ox: number; oy: number; moved: boolean; dx: number; dy: number }
 	| {
 			mode: 'resize';
 			id: number;
@@ -93,6 +93,34 @@ function hitTest(wx: number, wy: number): PlotView | null {
 		if (wx >= p.x && wx < p.x + p.w && wy >= p.y && wy < p.y + p.h) return p;
 	}
 	return null;
+}
+
+function overlapsAny(x: number, y: number, w: number, h: number, ignoreId: number): PlotView | null {
+	for (const p of plots) {
+		if (p.id === ignoreId) continue;
+		if (x < p.x + p.w && p.x < x + w && y < p.y + p.h && p.y < y + h) return p;
+	}
+	return null;
+}
+
+// Target rect of a drag in world coords; move/resize clamp to x,y >= 0.
+function dragRect(d: Drag): { x: number; y: number; w: number; h: number; ignoreId: number } | null {
+	if (d.mode === 'pan') return null;
+	if (d.mode === 'create') {
+		return {
+			x: Math.min(d.ax, d.cx),
+			y: Math.min(d.ay, d.cy),
+			w: Math.abs(d.cx - d.ax) + 1,
+			h: Math.abs(d.cy - d.ay) + 1,
+			ignoreId: -1
+		};
+	}
+	if (d.mode === 'move') {
+		const p = plots.find((q) => q.id === d.id);
+		if (!p) return null;
+		return { x: Math.max(0, d.ox + d.dx), y: Math.max(0, d.oy + d.dy), w: p.w, h: p.h, ignoreId: d.id };
+	}
+	return { x: Math.max(0, d.ox), y: Math.max(0, d.oy), w: d.ow, h: d.oh, ignoreId: d.id };
 }
 
 function fit(plotsToDraw: PlotView[]) {
@@ -160,6 +188,27 @@ function draw() {
 		ctx.beginPath();
 		ctx.moveTo(0, Y);
 		ctx.lineTo(cw, Y);
+		ctx.stroke();
+	}
+
+	// invalid zone: plots must sit at x,y >= 0 — shade + mark the forbidden half-plane
+	ctx.fillStyle = 'rgba(239,68,68,0.05)';
+	if (view.vx < 0) ctx.fillRect(0, 0, Math.min(cw, -view.vx * s), ch);
+	if (view.vy < 0) ctx.fillRect(0, 0, cw, Math.min(ch, -view.vy * s));
+	ctx.strokeStyle = 'rgba(239,68,68,0.4)';
+	ctx.lineWidth = 1;
+	const ax0 = Math.round((0 - view.vx) * s) + 0.5;
+	const ay0 = Math.round((0 - view.vy) * s) + 0.5;
+	if (ax0 > 0 && ax0 < cw) {
+		ctx.beginPath();
+		ctx.moveTo(ax0, 0);
+		ctx.lineTo(ax0, ch);
+		ctx.stroke();
+	}
+	if (ay0 > 0 && ay0 < ch) {
+		ctx.beginPath();
+		ctx.moveTo(0, ay0);
+		ctx.lineTo(cw, ay0);
 		ctx.stroke();
 	}
 
@@ -232,27 +281,34 @@ function draw() {
 		}
 	}
 
-	// rubber band
-	if (drag && drag.mode === 'create') {
-		const a = toScreen(drag.ax, drag.ay);
-		const b = toScreen(drag.cx, drag.cy);
-		const rx = Math.min(a.x, b.x),
-			ry = Math.min(a.y, b.y);
-		const rw = Math.abs(b.x - a.x),
-			rh = Math.abs(b.y - a.y);
-		ctx.setLineDash([6, 4]);
-		ctx.strokeStyle = ACCENT;
-		ctx.lineWidth = 2;
-		ctx.strokeRect(rx, ry, rw, rh);
-		ctx.setLineDash([]);
-		ctx.fillStyle = ACCENT;
-		ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
-		ctx.textAlign = 'left';
-		ctx.fillText(
-			`${Math.round(rw / s)}×${Math.round(rh / s)} ft`,
-			rx + 6,
-			ry + 6
-		);
+	// drag ghost: green = placeable, red = blocked (negative coords or overlap)
+	if (drag) {
+		const r = dragRect(drag);
+		if (r) {
+			const a = toScreen(r.x, r.y);
+			const W = r.w * s,
+				H = r.h * s;
+			const clash = overlapsAny(r.x, r.y, r.w, r.h, r.ignoreId);
+			const neg = r.x < 0 || r.y < 0;
+			const bad = clash !== null || neg;
+			const col = bad ? '#ef4444' : '#22c55e';
+			ctx.fillStyle = bad ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.18)';
+			ctx.fillRect(a.x, a.y, W, H);
+			ctx.setLineDash([6, 4]);
+			ctx.strokeStyle = col;
+			ctx.lineWidth = 2;
+			ctx.strokeRect(a.x + 0.5, a.y + 0.5, W - 1, H - 1);
+			ctx.setLineDash([]);
+			ctx.fillStyle = col;
+			ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+			ctx.textAlign = 'left';
+			const label = clash
+				? `overlaps ${clash.name}`
+				: neg
+					? 'x/y must be ≥ 0'
+					: `${r.w}×${r.h} ft at (${r.x}, ${r.y})`;
+			ctx.fillText(label, a.x + 6, a.y + 6);
+		}
 	}
 }
 
@@ -295,7 +351,7 @@ function onPointerDown(e: PointerEvent) {
 		}
 	}
 	if (hit) {
-		drag = { mode: 'move', id: hit.id, sx: px, sy: py, ox: hit.x, oy: hit.y, moved: false };
+		drag = { mode: 'move', id: hit.id, sx: px, sy: py, ox: hit.x, oy: hit.y, moved: false, dx: 0, dy: 0 };
 	} else {
 		drag = { mode: 'create', ax: Math.floor(w.x), ay: Math.floor(w.y), cx: Math.floor(w.x), cy: Math.floor(w.y) };
 	}
@@ -314,27 +370,29 @@ function onPointerMove(e: PointerEvent) {
 		drag.cx = Math.floor(w.x);
 		drag.cy = Math.floor(w.y);
 	} else if (drag.mode === 'move') {
-		const dx = Math.round((px - drag.sx) / view.scale);
-		const dy = Math.round((py - drag.sy) / view.scale);
-		if (dx !== 0 || dy !== 0) drag.moved = true;
+		drag.dx = Math.max(-drag.ox, Math.round((px - drag.sx) / view.scale));
+		drag.dy = Math.max(-drag.oy, Math.round((py - drag.sy) / view.scale));
+		if (drag.dx !== 0 || drag.dy !== 0) drag.moved = true;
 	} else if (drag.mode === 'resize') {
 		const w = toWorld(px, py);
+		const wx = Math.max(0, w.x),
+			wy = Math.max(0, w.y);
 		if (drag.corner === 'se') {
-			drag.ow = Math.max(1, Math.ceil(w.x - drag.ox));
-			drag.oh = Math.max(1, Math.ceil(w.y - drag.oy));
+			drag.ow = Math.max(1, Math.ceil(wx - drag.ox));
+			drag.oh = Math.max(1, Math.ceil(wy - drag.oy));
 		} else if (drag.corner === 'ne') {
-			drag.ow = Math.max(1, Math.ceil(w.x - drag.ox));
-			const nh = Math.max(1, Math.ceil(drag.oy + drag.oh - w.y));
+			drag.ow = Math.max(1, Math.ceil(wx - drag.ox));
+			const nh = Math.max(1, Math.ceil(drag.oy + drag.oh - wy));
 			drag.oy = drag.oy + drag.oh - nh;
 			drag.oh = nh;
 		} else if (drag.corner === 'sw') {
-			const nw = Math.max(1, Math.ceil(drag.ox + drag.ow - w.x));
+			const nw = Math.max(1, Math.ceil(drag.ox + drag.ow - wx));
 			drag.ox = drag.ox + drag.ow - nw;
 			drag.ow = nw;
-			drag.oh = Math.max(1, Math.ceil(w.y - drag.oy));
+			drag.oh = Math.max(1, Math.ceil(wy - drag.oy));
 		} else {
-			const nw = Math.max(1, Math.ceil(drag.ox + drag.ow - w.x));
-			const nh = Math.max(1, Math.ceil(drag.oy + drag.oh - w.y));
+			const nw = Math.max(1, Math.ceil(drag.ox + drag.ow - wx));
+			const nh = Math.max(1, Math.ceil(drag.oy + drag.oh - wy));
 			drag.ox = drag.ox + drag.ow - nw;
 			drag.oy = drag.oy + drag.oh - nh;
 			drag.ow = nw;
@@ -352,21 +410,14 @@ function onPointerUp(e: PointerEvent) {
 	const d = drag;
 	drag = null;
 	if (d.mode === 'create') {
-		const w = d.cx - d.ax + (d.cx >= d.ax ? 1 : 1);
-		const h = d.cy - d.ay + (d.cy >= d.ay ? 1 : 1);
-		const rx = Math.min(d.ax, d.cx),
-			ry = Math.min(d.ay, d.cy);
-		if (w >= 1 && h >= 1) oncreated({ x: rx, y: ry, w, h });
+		const r = dragRect(d);
+		if (r && r.w >= 1 && r.h >= 1) oncreated({ x: Math.max(0, r.x), y: Math.max(0, r.y), w: r.w, h: r.h });
 		else onselect(null);
 	} else if (d.mode === 'move') {
 		if (!d.moved) onselect(d.id);
-		else {
-			const dx = Math.round((e.offsetX - d.sx) / view.scale);
-			const dy = Math.round((e.offsetY - d.sy) / view.scale);
-			onmoved(d.id, d.ox + dx, d.oy + dy);
-		}
+		else onmoved(d.id, Math.max(0, d.ox + d.dx), Math.max(0, d.oy + d.dy));
 	} else if (d.mode === 'resize') {
-		onresized(d.id, d.ox, d.oy, d.ow, d.oh);
+		onresized(d.id, Math.max(0, d.ox), Math.max(0, d.oy), d.ow, d.oh);
 	}
 	draw();
 }
