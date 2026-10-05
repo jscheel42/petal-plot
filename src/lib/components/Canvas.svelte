@@ -169,6 +169,33 @@ function fit(plotsToDraw: PlotView[]) {
 	draw();
 }
 
+// Zoom anchored at a screen point; wheel, buttons, and keys all share this.
+function zoomAt(cx: number, cy: number, factor: number) {
+	const wx = cx / view.scale + view.vx,
+		wy = cy / view.scale + view.vy;
+	const ns = Math.min(160, Math.max(6, view.scale * factor));
+	view.scale = ns;
+	view.vx = wx - cx / ns;
+	view.vy = wy - cy / ns;
+	draw();
+}
+
+function zoomStep(dir: number) {
+	const el = canvas;
+	if (!el) return;
+	zoomAt(el.clientWidth / 2, el.clientHeight / 2, dir > 0 ? 1.3 : 1 / 1.3);
+}
+
+function centerOnSelected() {
+	const el = canvas;
+	if (!el || selectedId == null) return;
+	const p = plots.find((q) => q.id === selectedId);
+	if (!p) return;
+	view.vx = p.x + p.w / 2 - el.clientWidth / view.scale / 2;
+	view.vy = p.y + p.h / 2 - el.clientHeight / view.scale / 2;
+	draw();
+}
+
 function draw() {
 	const el = canvas;
 	if (!el) return;
@@ -429,12 +456,8 @@ function onWheel(e: WheelEvent) {
 	const px = e.offsetX,
 		py = e.offsetY;
 	if (e.ctrlKey || e.metaKey) {
-		const wx = px / view.scale + view.vx,
-			wy = py / view.scale + view.vy;
-		const ns = Math.min(160, Math.max(6, view.scale * Math.exp(-e.deltaY * 0.0022)));
-		view.scale = ns;
-		view.vx = wx - px / ns;
-		view.vy = wy - py / ns;
+		zoomAt(px, py, Math.exp(-e.deltaY * 0.0022));
+		return;
 	} else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
 		view.vx += e.deltaX / view.scale;
 	} else {
@@ -447,9 +470,18 @@ onMount(async () => {
 	await tick();
 	fit(plots);
 	window.addEventListener('keydown', (e) => {
-		if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLSelectElement)) {
+		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+		if (e.code === 'Space') {
 			spaceDown = true;
 			e.preventDefault();
+		} else if (e.key === '+' || e.key === '=') {
+			zoomStep(1);
+		} else if (e.key === '-') {
+			zoomStep(-1);
+		} else if (e.key === '0') {
+			fit(plots);
+		} else if (e.key === 'c') {
+			centerOnSelected();
 		}
 	});
 	window.addEventListener('keyup', (e) => {
@@ -482,3 +514,24 @@ const cursor = $derived(
 	onpointerup={onPointerUp}
 	onwheel={onWheel}
 ></canvas>
+
+<div class="absolute bottom-4 left-4 z-10 flex flex-col gap-0.5 rounded-xl border border-stone-200 bg-white/90 p-1 shadow-md backdrop-blur">
+	<button
+		class="flex h-8 w-8 items-center justify-center rounded-lg text-lg leading-none text-stone-700 hover:bg-stone-100"
+		title="Zoom in (+)"
+		onclick={() => zoomStep(1)}>＋</button>
+	<button
+		class="flex h-8 w-8 items-center justify-center rounded-lg text-lg leading-none text-stone-700 hover:bg-stone-100"
+		title="Zoom out (−)"
+		onclick={() => zoomStep(-1)}>−</button>
+	<div class="mx-1.5 h-px bg-stone-200"></div>
+	<button
+		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100"
+		title="Fit garden to screen (0)"
+		onclick={() => fit(plots)}>⛶</button>
+	<button
+		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:text-stone-300"
+		title="Center on selected plot (c)"
+		disabled={selectedId === null}
+		onclick={centerOnSelected}>◎</button>
+</div>
