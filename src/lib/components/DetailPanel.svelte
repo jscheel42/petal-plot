@@ -120,6 +120,7 @@ async function removePlot() {
 	try {
 		await api(`/api/plots/${selected.id}`, { method: 'DELETE' });
 		onClose();
+		refresh(); // reload plots — canvas must drop the box without a browser refresh
 	} catch (e) {
 		showToast(String(e));
 	}
