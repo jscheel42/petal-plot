@@ -19,7 +19,7 @@ export type TestDb = {
 // so harness state lives on globalThis behind a stable symbol.
 type Shared = { promise: Promise<TestDb> | null; resolved: TestDb | undefined };
 const store = globalThis as unknown as Record<symbol, Shared | undefined>;
-const shared: Shared = (store[Symbol.for('pixel-plot:test-db')] ??= { promise: null, resolved: undefined });
+const shared: Shared = (store[Symbol.for('petal-plot:test-db')] ??= { promise: null, resolved: undefined });
 
 async function execSql(d1: D1Database, file: string): Promise<void> {
 	// The proxy exec only takes one statement at a time; drizzle-kit files

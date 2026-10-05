@@ -10,7 +10,7 @@ onMount(async () => {
 	try {
 		const { gardens } = await api<{ gardens: { id: number; name: string }[] }>('/api/gardens');
 		store.gardens = gardens;
-		const saved = Number(localStorage.getItem('pixelPlot.gardenId'));
+		const saved = Number(localStorage.getItem('petalPlot.gardenId'));
 		store.currentGardenId = gardens.some((g) => g.id === saved) ? saved : gardens[0]?.id ?? null;
 	} catch (e) {
 		console.error(e);
@@ -18,7 +18,7 @@ onMount(async () => {
 });
 
 function selectGarden() {
-	if (store.currentGardenId != null) localStorage.setItem('pixelPlot.gardenId', String(store.currentGardenId));
+	if (store.currentGardenId != null) localStorage.setItem('petalPlot.gardenId', String(store.currentGardenId));
 }
 
 async function newGarden() {
@@ -32,7 +32,7 @@ async function newGarden() {
 		const { gardens } = await api<{ gardens: { id: number; name: string }[] }>('/api/gardens');
 		store.gardens = gardens;
 		store.currentGardenId = garden.id;
-		localStorage.setItem('pixelPlot.gardenId', String(garden.id));
+		localStorage.setItem('petalPlot.gardenId', String(garden.id));
 	} catch (e) {
 		alert(String(e));
 	}
@@ -41,7 +41,7 @@ async function newGarden() {
 
 <div class="flex h-screen flex-col">
 	<header class="flex items-center gap-4 border-b border-stone-300 bg-white px-4 py-2 shadow-sm">
-		<div class="flex items-center gap-2 text-lg font-bold text-green-800">🌱 Pixel Plot</div>
+		<div class="flex items-center gap-2 text-lg font-bold text-green-800">🌱 Petal Plot</div>
 
 		<select
 			class="rounded border border-stone-300 bg-white px-2 py-1 text-sm"

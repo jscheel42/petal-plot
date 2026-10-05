@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "pixel-plot",
+	"name": "petal-plot",
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"compatibility_date": "2026-10-01",
 	"compatibility_flags": ["nodejs_compat"],
@@ -11,8 +11,8 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "pixel-plot",
-			"database_id": "be592dbf-d420-4299-94ac-61d0f00a8835",
+			"database_name": "petal-plot",
+			"database_id": "2af86df6-e267-41e5-8d80-10ce8e233dcc",
 			"migrations_dir": "drizzle"
 		}
 	]

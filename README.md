@@ -1,11 +1,11 @@
-# 🌱 Pixel Plot
+# 🌱 Petal Plot
 
 A hobby garden-management web app: sketch your garden on a 2D grid, track what's
 planted where, get crop-rotation warnings, and replay any past date with a slider.
 
 **Stack:** SvelteKit 3 (Svelte 5 runes, TS) · Tailwind v4 · Drizzle ORM · Cloudflare D1 (serverless SQLite) · Cloudflare Workers.
 
-**Live:** https://pixel-plot.pixel-plot.workers.dev
+**Live:** https://petal-plot.pixel-plot.workers.dev
 
 ## Run locally (dev)
 
@@ -34,7 +34,7 @@ migrations + seed, so they exercise the same SQL as production.
 
 ```bash
 npx wrangler login
-npx wrangler d1 create pixel-plot        # paste the returned database_id into wrangler.jsonc
+npx wrangler d1 create petal-plot        # paste the returned database_id into wrangler.jsonc
 npm run db:migrate:remote
 npm run deploy                           # vite build && wrangler deploy
 ```

@@ -1,5 +1,5 @@
 {
-	"name": "pixel-plot",
+	"name": "petal-plot",
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
@@ -9,8 +9,8 @@
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"test:e2e": "playwright test",
-		"db:migrate": "wrangler d1 migrations apply pixel-plot --local",
-		"db:migrate:remote": "wrangler d1 migrations apply pixel-plot --remote",
+		"db:migrate": "wrangler d1 migrations apply petal-plot --local",
+		"db:migrate:remote": "wrangler d1 migrations apply petal-plot --remote",
 		"deploy": "vite build && wrangler deploy",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
