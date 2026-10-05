@@ -93,7 +93,7 @@ async function newGarden() {
 						<li>Drag plot → move · corner handles → resize</li>
 						<li>Scroll / pinch → zoom at cursor</li>
 						<li>Side swipe / space + drag → pan</li>
-						<li>＋ − ⛶ ◎ 🏷️ buttons or + − 0 c l keys → zoom / fit / center / labels</li>
+						<li>🏷️ (`l`) → show/hide plot labels (off by default)</li>
 						<li>Esc → close panels</li>
 						<li>North ↑ compass · view auto-saves per garden</li>
 						<li>Slider → replay any past date</li>

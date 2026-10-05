@@ -72,7 +72,7 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 | Move / resize | drag plot body / corner handles |
 | Replay | 🕰️ slider in the header |
 | North | compass rose, top-left (garden north = up) |
-| Labels | 🏷️ button or `l` key toggles `Name · W×Hft` labels (persisted); ⚠️ warnings always shown |
+| Labels | 🏷️ button or `l` key toggles `Name · W×Hft` labels — **off by default**, choice persisted; ⚠️ warnings always shown |
 | View memory | pan/zoom auto-saved per garden; reload restores it. First visit fits all plots |
 
 ## Layout

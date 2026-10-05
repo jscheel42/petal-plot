@@ -53,8 +53,8 @@ let fittedFor = $state<number | null>(null);
 let positioned = $state(false); // view already placed on real data (or restored)
 let userTouched = $state(false); // user panned/zoomed → stop auto-fit, start persisting
 let saveT = 0;
-// Label visibility persists across reloads; typeof guard for SSR.
-let showLabels = $state(typeof localStorage === 'undefined' || localStorage.getItem('petalPlot.showLabels') !== 'off');
+// Labels default OFF; explicit 'on' persists across reloads. typeof guard for SSR.
+let showLabels = $state(typeof localStorage !== 'undefined' && localStorage.getItem('petalPlot.showLabels') === 'on');
 
 type Drag =
 	| { mode: 'pan'; sx: number; sy: number; v0: { vx: number; vy: number; scale: number } }
