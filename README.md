@@ -5,7 +5,7 @@ planted where, get crop-rotation warnings, and replay any past date with a slide
 
 **Stack:** SvelteKit 3 (Svelte 5 runes, TS) · Tailwind v4 · Drizzle ORM · Cloudflare D1 (serverless SQLite) · Cloudflare Workers.
 
-**Live:** https://petal-plot.pixel-plot.workers.dev
+**Live:** https://petal-plot.joshuascheel.com (custom domain bound to the `petal-plot` worker; workers.dev mirror also serves)
 
 ## Run locally (dev)
 

@@ -129,7 +129,7 @@ erDiagram
 - [x] Data layer async: `drizzle-orm/d1`, `env.DB` via `cloudflare:workers`; dev = platform proxy, tests = ephemeral proxy
 - [x] Migrations + seed applied by wrangler (`drizzle/0001_seed.sql`)
 - [x] 12/12 tests green against real D1 SQL; local browser smoke verified
-- [x] `wrangler deploy` to workers.dev — https://petal-plot.pixel-plot.workers.dev (renamed from pixel-plot; cert provisioning lag ~2 min on first deploy)
+- [x] `wrangler deploy` to workers.dev; custom domain **https://petal-plot.joshuascheel.com** bound via dashboard (DNS token created the proxied record; dashboard worker-bind cleared the 522 — API OAuth/token cannot bind custom hostnames or rename the account subdomain)
 - [x] Ported Cloud Run data (Cloud Garden) into D1 via `scripts/port-cloud-run.sql`; live API + UI verified; Cloud Run/GCS/AR deleted
 - [ ] Auth (Cloudflare Access in front of the worker instead of rolling our own)
 
