@@ -451,19 +451,16 @@ function onPointerUp(e: PointerEvent) {
 	draw();
 }
 
+// Wheel zooms at cursor (no modifier needed); horizontal-dominant
+// trackpad swipes pan instead.
 function onWheel(e: WheelEvent) {
 	e.preventDefault();
-	const px = e.offsetX,
-		py = e.offsetY;
-	if (e.ctrlKey || e.metaKey) {
-		zoomAt(px, py, Math.exp(-e.deltaY * 0.0022));
-		return;
-	} else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+	if (!(e.ctrlKey || e.metaKey) && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
 		view.vx += e.deltaX / view.scale;
-	} else {
-		view.vy += e.deltaY / view.scale;
+		draw();
+		return;
 	}
-	draw();
+	zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * 0.0022));
 }
 
 onMount(async () => {

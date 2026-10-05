@@ -64,8 +64,9 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 
 | Action | Input |
 | --- | --- |
-| Pan | scroll / trackpad swipe / space+drag |
-| Zoom | ⌘/Ctrl + scroll (pinch) |
+| Pan | trackpad side-swipe / space+drag |
+| Zoom | scroll or pinch (at cursor) · ＋/− buttons · `+` `−` keys |
+| Fit / center | ⛶ button (`0`) · ◎ selected plot (`c`) |
 | Create plot | drag on empty grid |
 | Open panel | click a plot |
 | Move / resize | drag plot body / corner handles |

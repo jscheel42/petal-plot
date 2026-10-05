@@ -91,9 +91,10 @@ async function newGarden() {
 						<li>Drag empty grid → create plot</li>
 						<li>Click plot → open panel (plant/harvest/history)</li>
 						<li>Drag plot → move · corner handles → resize</li>
-						<li>Scroll / trackpad swipe → pan</li>
-						<li>⌘/Ctrl + scroll (pinch) → zoom</li>
-						<li>Space + drag → pan · Esc → close panels</li>
+						<li>Scroll / pinch → zoom at cursor</li>
+						<li>Side swipe / space + drag → pan</li>
+						<li>＋ − ⛶ ◎ buttons or + − 0 c keys → zoom / fit / center</li>
+						<li>Esc → close panels</li>
 						<li>Slider → replay any past date</li>
 					</ul>
 				</div>
