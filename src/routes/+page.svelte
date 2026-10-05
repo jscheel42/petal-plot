@@ -2,6 +2,7 @@
 import { api } from '#lib/api';
 import Canvas from '#lib/components/Canvas.svelte';
 import DetailPanel from '#lib/components/DetailPanel.svelte';
+import PlotEditor from '#lib/components/PlotEditor.svelte';
 import { asOfDate, store } from '#lib/state.svelte.js';
 
 
@@ -35,6 +36,8 @@ type PlotView = {
 let plots = $state<PlotView[]>([]);
 let selectedId = $state<number | null>(null);
 let createRect = $state<{ x: number; y: number; w: number; h: number } | null>(null);
+// right-click editor popover anchored at the click point
+let ctx = $state<{ plotId: number; x: number; y: number } | null>(null);
 let createName = $state('');
 let createType = $state<'in_ground' | 'raised_bed' | 'container'>('raised_bed');
 let toast = $state<string | null>(null);
@@ -43,6 +46,15 @@ function showToast(msg: string) {
 	toast = msg;
 	setTimeout(() => (toast = null), 3500);
 }
+
+function onPlotContext(plotId: number, x: number, y: number) {
+	ctx = { plotId, x, y };
+}
+
+// drop the popover if its plot disappears (deleted elsewhere / garden switch)
+$effect(() => {
+	if (ctx && !plots.some((p) => p.id === ctx?.plotId)) ctx = null;
+});
 
 function refresh() {
 	if (store.currentGardenId == null) return;
@@ -128,6 +140,7 @@ const createClash = $derived(
 		onmoved={onMoved}
 		onresized={onResized}
 		onplantmoved={onPlantMoved}
+		onplotcontext={onPlotContext}
 		onselect={onSelect}
 	/>
 </div>
@@ -182,6 +195,15 @@ const createClash = $derived(
 
 {#if selected}
 	<DetailPanel {selected} onClose={() => (selectedId = null)} {showToast} {refresh} />
+{/if}
+
+{#if ctx}
+	{#key ctx.plotId}
+		{@const cp = plots.find((p) => p.id === ctx?.plotId)}
+		{#if cp}
+			<PlotEditor plot={cp} x={ctx.x} y={ctx.y} onclose={() => (ctx = null)} onsaved={refresh} {showToast} />
+		{/if}
+	{/key}
 {/if}
 
 {#if toast}

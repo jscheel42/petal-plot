@@ -7,6 +7,7 @@ import { GET as getPlots, POST as createPlot } from './gardens/[id]/plots/+serve
 import { POST as addPlanting } from './plots/[id]/plantings/+server.ts';
 import { PATCH as patchPlanting } from './plantings/[id]/+server.ts';
 import { GET as getHistory } from './plots/[id]/history/+server.ts';
+import { PATCH as patchPlot } from './plots/[id]/+server.ts';
 
 // Alias-resolved harness boots the ephemeral D1 + applies migrations/seed.
 await testDb();
@@ -316,5 +317,59 @@ describe('harvest dates', () => {
 			body: { endedOn: tomorrow }
 		});
 		expect(h.status).toBe(200);
+	});
+});
+
+// Right-click editor backend: partial property edits, validation, resize overlap.
+describe('plot property edits', () => {
+	let bedId = 0;
+
+	it('renames, retypes, and notes a plot', async () => {
+		const bed = await call<{ plot: { id: number } }>(createPlot as Handler, {
+			params: { id: String(gardenId) },
+			body: { name: 'EditBed', type: 'raised_bed', x: 40, y: 0, w: 4, h: 4 }
+		});
+		expect(bed.status).toBe(201);
+		bedId = bed.json.plot.id;
+		const r = await call<{ plot: { name: string; type: string; notes: string | null; w: number; h: number } }>(
+			patchPlot as Handler,
+			{
+				params: { id: String(bedId) },
+				method: 'PATCH',
+				body: { name: ' Tomato Bed ', type: 'container', notes: '  ', w: 4, h: 6 }
+			}
+		);
+		expect(r.status).toBe(200);
+		expect(r.json.plot.name).toBe('Tomato Bed');
+		expect(r.json.plot.type).toBe('container');
+		expect(r.json.plot.notes).toBeNull();
+		expect(r.json.plot.h).toBe(6);
+	});
+
+	it('rejects blank names, bad types, and zero sizes', async () => {
+		const r = await call<{ error: string }>(patchPlot as Handler, {
+			params: { id: String(bedId) },
+			method: 'PATCH',
+			body: { name: '   ', type: 'windowbox', w: 0 }
+		});
+		expect(r.status).toBe(400);
+		expect(r.json.error).toContain('name');
+		expect(r.json.error).toContain('type');
+		expect(r.json.error).toContain('w');
+	});
+
+	it('rejects resize that overlaps a neighbor', async () => {
+		const near = await call(createPlot as Handler, {
+			params: { id: String(gardenId) },
+			body: { name: 'NearBed', type: 'raised_bed', x: 44, y: 0, w: 4, h: 4 }
+		});
+		expect(near.status).toBe(201);
+		const r = await call<{ error: string }>(patchPlot as Handler, {
+			params: { id: String(bedId) },
+			method: 'PATCH',
+			body: { w: 5 }
+		});
+		expect(r.status).toBe(409);
+		expect(r.json.error).toContain('NearBed');
 	});
 });

@@ -71,6 +71,7 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 | Open panel | click a plot |
 | Move / resize | drag plot body / corner handles |
 | Reposition plantings | select plot → drag its dashed band (whole-feet snap; server validates bounds + band overlap) |
+| Edit properties | right-click a plot → popover (name, type, size, notes, delete) |
 | Replay | 🕰️ slider in the header |
 | North | compass rose, top-left (garden north = up) |
 | Labels | 🏷️ button or `l` key toggles `Name · W×Hft` labels — **off by default**, choice persisted; ⚠️ warnings always shown |

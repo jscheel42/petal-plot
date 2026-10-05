@@ -91,6 +91,7 @@ async function newGarden() {
 						<li>Drag empty grid → create plot</li>
 						<li>Click plot → open panel (plant/harvest/history)</li>
 						<li>Drag plot → move · corner handles → resize</li>
+						<li>Right-click a plot → edit name, type, size &amp; notes</li>
 						<li>Select plot → dashed planting bands draggable to reposition rows</li>
 						<li>Scroll / pinch → zoom at cursor</li>
 						<li>Side swipe / space + drag → pan</li>

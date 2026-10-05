@@ -38,6 +38,7 @@ let {
 	onmoved,
 	onresized,
 	onplantmoved,
+	onplotcontext,
 	onselect
 }: {
 	plots: PlotView[];
@@ -47,6 +48,7 @@ let {
 	onmoved: (id: number, x: number, y: number) => void;
 	onresized: (id: number, x: number, y: number, w: number, h: number) => void;
 	onplantmoved: (plantingId: number, x: number, y: number) => void;
+	onplotcontext: (plotId: number, clientX: number, clientY: number) => void;
 	onselect: (id: number | null) => void;
 } = $props();
 
@@ -492,6 +494,7 @@ function draw() {
 
 
 function onPointerDown(e: PointerEvent) {
+	if (e.button === 2) return; // right button is reserved for the context menu
 	const el = canvas;
 	if (!el) return;
 	el.setPointerCapture(e.pointerId);
@@ -625,6 +628,16 @@ function onPointerUp(e: PointerEvent) {
 	draw();
 }
 
+function onContextMenu(e: MouseEvent) {
+	const el = canvas;
+	if (!el) return;
+	e.preventDefault();
+	const rect = el.getBoundingClientRect();
+	const w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+	const hit = hitTest(Math.floor(w.x), Math.floor(w.y));
+	if (hit) onplotcontext(hit.id, e.clientX, e.clientY);
+}
+
 // Wheel zooms at cursor (no modifier needed); horizontal-dominant
 // trackpad swipes pan instead.
 function onWheel(e: WheelEvent) {
@@ -692,6 +705,7 @@ const cursor = $derived(
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onwheel={onWheel}
+	oncontextmenu={onContextMenu}
 ></canvas>
 
 <div class="absolute bottom-4 left-4 z-10 flex flex-col gap-0.5 rounded-xl border border-stone-200 bg-white/90 p-1 shadow-md backdrop-blur">

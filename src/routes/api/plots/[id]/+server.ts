@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { and, eq, ne } from 'drizzle-orm';
 import { getDb } from '#lib/server/db';
+import { rectsOverlap } from '#lib/server/layout';
 import { plot } from '#lib/server/schema';
 import type { RequestHandler } from './$types';
 
@@ -10,14 +11,8 @@ const PLOT_TYPE_VALUES: Record<string, 'in_ground' | 'raised_bed' | 'container'>
 	container: 'container'
 };
 
-function rectsOverlap(
-	a: { x: number; y: number; w: number; h: number },
-	b: { x: number; y: number; w: number; h: number }
-): boolean {
-	return a.x < b.x + b.w && b.x < a.x + b.w && a.y < b.y + b.h && b.y < a.y + b.h;
-}
 
-// PATCH accepts any subset of { name, type, x, y, w, h }.
+// PATCH accepts any subset of { name, type, x, y, w, h, notes }.
 export const PATCH: RequestHandler = async ({ params, request }) => {
 	const id = Number(params.id);
 	const b = await request.json().catch(() => ({}));
@@ -30,13 +25,16 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 	if (b.type !== undefined && type === undefined)
 		problems.push(`type: must be one of in_ground, raised_bed, container (got ${JSON.stringify(b.type)})`);
 	if (b.name !== undefined && !(typeof b.name === 'string' && b.name.trim())) problems.push('name: text required');
+	const notes =
+		b.notes === undefined ? existing.notes : typeof b.notes === 'string' && b.notes.trim() ? b.notes.trim() : null;
 	const next = {
 		name: typeof b.name === 'string' && b.name.trim() ? b.name.trim() : existing.name,
 		type: type ?? existing.type,
 		x: b.x ?? existing.x,
 		y: b.y ?? existing.y,
 		w: b.w ?? existing.w,
-		h: b.h ?? existing.h
+		h: b.h ?? existing.h,
+		notes
 	};
 	for (const k of ['x', 'y', 'w', 'h'] as const) {
 		if (!Number.isInteger(next[k])) problems.push(`${k}: whole number required (got ${JSON.stringify(next[k])})`);
