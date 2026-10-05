@@ -42,8 +42,9 @@ returned `database_id` into `wrangler.jsonc`) + bind the custom domain in the da
 npm run deploy:preview    # vite build && wrangler versions upload
 # → prints https://<hash>-petal-plot.pixel-plot.workers.dev — test there;
 #   production (petal-plot.joshuascheel.com + workers.dev) keeps serving the old version
-npm run deploy:promote    # wrangler versions deploy — interactive: pick version,
-#   optional canary (e.g. 10% → 100%), atomic switch of all triggers incl. custom domain
+npm run deploy:promote    # wrangler versions deploy — interactive picker, or non-interactive:
+#   npx wrangler versions deploy "<version-id>@100" -y   (note: @, not =)
+#   canary: npx wrangler versions deploy "<old>@90" "<new>@10" then @100
 npm run rollback          # wrangler rollback — instant revert to previous deployment
 npm run deploy            # legacy shortcut: build + straight to production (skips preview)
 ```
