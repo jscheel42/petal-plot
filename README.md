@@ -32,12 +32,28 @@ migrations + seed, so they exercise the same SQL as production.
 
 ## Deploy (Cloudflare Workers + D1)
 
+One-time setup: `npx wrangler login` + `npx wrangler d1 create petal-plot` (paste the
+returned `database_id` into `wrangler.jsonc`) + bind the custom domain in the dashboard
+(Workers & Pages → petal-plot → Settings → Domains & routes — API cannot bind hostnames).
+
+### Preview → production workflow (Workers Versions)
+
 ```bash
-npx wrangler login
-npx wrangler d1 create petal-plot        # paste the returned database_id into wrangler.jsonc
-npm run db:migrate:remote
-npm run deploy                           # vite build && wrangler deploy
+npm run deploy:preview    # vite build && wrangler versions upload
+# → prints https://<hash>-petal-plot.pixel-plot.workers.dev — test there;
+#   production (petal-plot.joshuascheel.com + workers.dev) keeps serving the old version
+npm run deploy:promote    # wrangler versions deploy — interactive: pick version,
+#   optional canary (e.g. 10% → 100%), atomic switch of all triggers incl. custom domain
+npm run rollback          # wrangler rollback — instant revert to previous deployment
+npm run deploy            # legacy shortcut: build + straight to production (skips preview)
 ```
+
+Caveats:
+- Preview versions run against the **production D1** (same binding). Fine for code/UI
+  changes; for schema changes run migrations locally + `npm test` first, apply
+  `db:migrate:remote` immediately before promote. D1 Time Travel (7-day PITR) is the escape hatch.
+- `versions upload` does **not** change triggers; custom-domain/route changes need
+  `wrangler triggers deploy`.
 
 Free tier covers this comfortably (Workers: 100k requests/day; D1: 5M reads +
 100k writes/day, 5 GB). Data is durable across restarts with 7-day point-in-time

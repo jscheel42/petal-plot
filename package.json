@@ -12,6 +12,9 @@
 		"db:migrate": "wrangler d1 migrations apply petal-plot --local",
 		"db:migrate:remote": "wrangler d1 migrations apply petal-plot --remote",
 		"deploy": "vite build && wrangler deploy",
+		"deploy:preview": "vite build && wrangler versions upload",
+		"deploy:promote": "wrangler versions deploy",
+		"rollback": "wrangler rollback",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run"
