@@ -14,6 +14,7 @@ export const GET: RequestHandler = async ({ params }) => {
 	const history = await db
 		.select({
 			id: planting.id,
+			plantId: planting.plantId,
 			name: plant.name,
 			emoji: plant.emoji,
 			family: plant.family,

@@ -5,7 +5,7 @@ import { testDb } from '#lib/server/test-db';
 import { GET as listGardens, POST as createGarden } from './gardens/+server.ts';
 import { GET as getPlots, POST as createPlot } from './gardens/[id]/plots/+server.ts';
 import { POST as addPlanting } from './plots/[id]/plantings/+server.ts';
-import { PATCH as patchPlanting } from './plantings/[id]/+server.ts';
+import { DELETE as deletePlanting, PATCH as patchPlanting } from './plantings/[id]/+server.ts';
 import { GET as getHistory } from './plots/[id]/history/+server.ts';
 import { PATCH as patchPlot } from './plots/[id]/+server.ts';
 
@@ -143,7 +143,7 @@ describe('planting lifecycle', () => {
 			method: 'PATCH',
 			body: { endedOn: '2000-01-01' }
 		});
-		expect(r.status).toBe(404);
+		expect(r.status).toBe(400);
 	});
 });
 
@@ -371,5 +371,147 @@ describe('plot property edits', () => {
 		});
 		expect(r.status).toBe(409);
 		expect(r.json.error).toContain('NearBed');
+	});
+});
+
+// Data fixing: edit plant/qty/window of any planting (current or past),
+// reactivate by clearing endedOn, delete records outright.
+describe('planting record edits', () => {
+	const local = (daysAgo: number) => {
+		const d = new Date();
+		d.setDate(d.getDate() - daysAgo);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	};
+	let bedId = 0;
+	let pId = 0;
+
+	it('edits quantity and harvest window of a past planting', async () => {
+		const bed = await call<{ plot: { id: number } }>(createPlot as Handler, {
+			params: { id: String(gardenId) },
+			body: { name: 'FixBed', type: 'raised_bed', x: 50, y: 0, w: 4, h: 4 }
+		});
+		expect(bed.status).toBe(201);
+		bedId = bed.json.plot.id;
+		const p = await call<{ planting: { id: number } }>(addPlanting as Handler, {
+			params: { id: String(bedId) },
+			body: { plantId: 5, quantity: 4, plantedOn: local(10), x: 0, y: 0 }
+		});
+		expect(p.status).toBe(201);
+		pId = p.json.planting.id;
+
+		const r = await call<{ planting: { quantity: number; plantedOn: string; endedOn: string | null } }>(
+			patchPlanting as Handler,
+			{
+				params: { id: String(pId) },
+				method: 'PATCH',
+				body: { quantity: 6, plantedOn: local(9), endedOn: local(1) }
+			}
+		);
+		expect(r.status).toBe(200);
+		expect(r.json.planting.quantity).toBe(6);
+		expect(r.json.planting.plantedOn).toBe(local(9));
+		expect(r.json.planting.endedOn).toBe(local(1));
+
+		const h = await call<{ history: { id: number; quantity: number; endedOn: string | null }[] }>(
+			getHistory as Handler,
+			{ params: { id: String(bedId) } }
+		);
+		const row = h.json.history.find((x) => x.id === pId);
+		expect(row?.quantity).toBe(6);
+		expect(row?.endedOn).toBe(local(1));
+	});
+
+	it('rejects window, plant, and quantity mistakes', async () => {
+		const bad = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { plantedOn: local(0), endedOn: local(5) }
+		});
+		expect(bad.status).toBe(400);
+		expect(bad.json.error).toContain('before plantedOn');
+
+		const noPlant = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { plantId: 999 }
+		});
+		expect(noPlant.status).toBe(400);
+		expect(noPlant.json.error).toContain('not found');
+
+		const zeroQty = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { quantity: 0 }
+		});
+		expect(zeroQty.status).toBe(400);
+
+		const future = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { endedOn: local(-3) }
+		});
+		expect(future.status).toBe(400);
+	});
+
+	it('reactivates a harvested planting when endedOn is cleared', async () => {
+		const todayOff = await call<{ plots: { id: number; plantings: { id: number }[] }[] }>(getPlots as Handler, {
+			params: { id: String(gardenId) },
+			query: `?asof=${local(0)}`
+		});
+		expect(todayOff.json.plots.find((p) => p.id === bedId)?.plantings.some((a) => a.id === pId)).toBe(false);
+
+		const r = await call<{ planting: { endedOn: string | null } }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { endedOn: null }
+		});
+		expect(r.status).toBe(200);
+		expect(r.json.planting.endedOn).toBeNull();
+
+		const todayOn = await call<{ plots: { id: number; plantings: { id: number }[] }[] }>(getPlots as Handler, {
+			params: { id: String(gardenId) },
+			query: `?asof=${local(0)}`
+		});
+		expect(todayOn.json.plots.find((p) => p.id === bedId)?.plantings.some((a) => a.id === pId)).toBe(true);
+	});
+
+	it('refuses quantity growth that collides with an overlapping band', async () => {
+		// cucumber (spacing 0.5) qty 8 → 4×1 auto-stacked below the kale band
+		const cuc = await call<{ planting: { id: number } }>(addPlanting as Handler, {
+			params: { id: String(bedId) },
+			body: { plantId: 7, quantity: 8, plantedOn: local(8) }
+		});
+		expect(cuc.status).toBe(201);
+		// kale qty 12 → 4×3 ft, no longer clears the cucumber band
+		const r = await call<{ error: string }>(patchPlanting as Handler, {
+			params: { id: String(pId) },
+			method: 'PATCH',
+			body: { quantity: 12 }
+		});
+		expect(r.status).toBe(409);
+		expect(r.json.error).toContain('overlaps');
+	});
+
+	it('deletes a planting record', async () => {
+		const t = await call<{ planting: { id: number } }>(addPlanting as Handler, {
+			params: { id: String(bedId) },
+			body: { plantId: 1, quantity: 1, plantedOn: local(3) }
+		});
+		expect(t.status).toBe(201);
+		const d = await call<{ deleted: number }>(deletePlanting as Handler, {
+			params: { id: String(t.json.planting.id) },
+			method: 'DELETE'
+		});
+		expect(d.status).toBe(200);
+		expect(d.json.deleted).toBe(t.json.planting.id);
+
+		const h = await call<{ history: { id: number }[] }>(getHistory as Handler, { params: { id: String(bedId) } });
+		expect(h.json.history.some((x) => x.id === t.json.planting.id)).toBe(false);
+
+		const again = await call(deletePlanting as Handler, {
+			params: { id: String(t.json.planting.id) },
+			method: 'DELETE'
+		});
+		expect(again.status).toBe(404);
 	});
 });

@@ -11,7 +11,7 @@ export function footprint(quantity: number, spacing: number, plotW: number): { w
 }
 
 export function rectsOverlap(a: Rect, b: Rect): boolean {
-	return a.x < b.x + b.w && b.x < a.x + b.w && a.y < b.y + b.h && b.y < a.y + b.h;
+	return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
 // First free integer anchor for a footprint in a plot (scan top-to-bottom,

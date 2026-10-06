@@ -88,7 +88,7 @@ async function newGarden() {
 						<li>Drag empty grid → create plot</li>
 						<li>Click plot → open panel (plant/harvest/history)</li>
 						<li>Drag plot → move · corner handles → resize</li>
-						<li>Right-click a plot → edit name, type, size &amp; notes</li>
+						<li>✏️ any planting (now or past) → fix plant, qty, dates · remove it</li>
 						<li>Touch: 1 finger drag → pan · tap → select</li>
 						<li>Touch: pinch → zoom · long-press plot → edit popover</li>
 						<li>Scroll → zoom at cursor · space + drag → pan</li>

@@ -7,6 +7,7 @@ import { asOfDate, isoDaysAgo } from '#lib/state.svelte.js';
 type PlantRow = { id: number; name: string; family: string; emoji: string; spacing: number; sun: string };
 type HistoryRow = {
 	id: number;
+	plantId: number;
 	name: string;
 	emoji: string;
 	family: string;
@@ -58,6 +59,16 @@ let pickedPlant = $state<PlantRow | null>(null);
 let quantity = $state(1);
 let plantedOn = $state(asOfDate());
 
+// inline editor for fixing any planting record (current or past)
+let editingId = $state<number | null>(null);
+let editName = $state('');
+let editPlantId = $state(0);
+let editQty = $state(1);
+let editPlantedOn = $state('');
+let editEndedOn = $state('');
+let editErr = $state('');
+let editBusy = $state(false);
+
 $effect(() => {
 	if (catalog.length === 0) {
 		api<{ plants: PlantRow[] }>('/api/plants')
@@ -69,6 +80,7 @@ $effect(() => {
 $effect(() => {
 	const id = selected.id;
 	picking = false;
+	editingId = null;
 	pickedPlant = null;
 	search = '';
 	quantity = 1;
@@ -124,6 +136,54 @@ async function harvest(plantingId: number, name: string) {
 	}
 }
 
+function openEdit(r: { id: number; plantId: number; name: string; quantity: number; plantedOn: string; endedOn?: string | null }) {
+	editingId = r.id;
+	editName = r.name;
+	editPlantId = r.plantId;
+	editQty = r.quantity;
+	editPlantedOn = r.plantedOn;
+	editEndedOn = r.endedOn ?? '';
+	editErr = '';
+	editBusy = false;
+}
+
+async function saveEdit() {
+	if (editBusy || editingId == null) return;
+	editBusy = true;
+	editErr = '';
+	try {
+		await api(`/api/plantings/${editingId}`, {
+			method: 'PATCH',
+			body: JSON.stringify({
+				plantId: editPlantId,
+				quantity: editQty,
+				plantedOn: editPlantedOn,
+				endedOn: editEndedOn === '' ? null : editEndedOn
+			})
+		});
+		showToast('Planting updated');
+		editingId = null;
+		refresh();
+		api<{ history: HistoryRow[] }>(`/api/plots/${selected.id}/history`).then((h) => (history = h.history));
+	} catch (e) {
+		editErr = e instanceof Error ? e.message : String(e);
+		editBusy = false;
+	}
+}
+
+async function removeEditing() {
+	if (editingId == null) return;
+	if (!confirm(`Delete the "${editName}" planting record? The plot keeps its history of everything else.`)) return;
+	try {
+		await api(`/api/plantings/${editingId}`, { method: 'DELETE' });
+		showToast(`"${editName}" planting removed`);
+		editingId = null;
+		refresh();
+		api<{ history: HistoryRow[] }>(`/api/plots/${selected.id}/history`).then((h) => (history = h.history));
+	} catch (e) {
+		showToast(String(e));
+	}
+}
 async function removePlot() {
 	if (!confirm(`Delete "${selected.name}" and all its planting history?`)) return;
 	try {
@@ -161,18 +221,26 @@ async function removePlot() {
 		{:else}
 			<ul class="space-y-1">
 				{#each selected.plantings as pl (pl.id)}
-					<li class="flex items-center justify-between rounded-md bg-stone-50 px-2 py-1.5">
-						<span>
-							{pl.emoji} {pl.name} × {pl.quantity}
-							<span class="text-xs text-stone-400">at ({pl.fx}, {pl.fy}) {pl.fw}×{pl.fh} ft</span>
-						</span>
-						<span class="text-stone-400">since {pl.plantedOn}</span>
-						<button
-							class="rounded bg-green-100 px-2 py-0.5 text-green-800 hover:bg-green-200"
-							onclick={() => harvest(pl.id, pl.name)}
-						>
-							Harvest
-						</button>
+					<li class="rounded-md bg-stone-50">
+						<div class="flex items-center justify-between px-2 py-1.5">
+							<span>
+								{pl.emoji} {pl.name} × {pl.quantity}
+								<span class="text-xs text-stone-400">at ({pl.fx}, {pl.fy}) {pl.fw}×{pl.fh} ft</span>
+							</span>
+							<span class="flex items-center gap-1.5">
+								<span class="text-stone-400">since {pl.plantedOn}</span>
+								<button class="rounded px-1.5 hover:bg-stone-200" title="Edit planting" onclick={() => openEdit(pl)}>✏️</button>
+								<button
+									class="rounded bg-green-100 px-2 py-0.5 text-green-800 hover:bg-green-200"
+									onclick={() => harvest(pl.id, pl.name)}
+								>
+									Harvest
+								</button>
+							</span>
+						</div>
+						{#if editingId === pl.id}
+							<div class="px-2 pb-2">{@render editForm()}</div>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -238,12 +306,20 @@ async function removePlot() {
 		{:else}
 			<ul class="space-y-1">
 				{#each history as h (h.id)}
-					<li class="flex justify-between rounded-md bg-stone-50 px-2 py-1">
-						<span>{h.emoji} {h.name} × {h.quantity}</span>
-						<span class="text-stone-400">
-							{h.plantedOn}
-							{h.endedOn ? `→ ${h.endedOn}` : '→ growing'}
-						</span>
+					<li class="rounded-md bg-stone-50">
+						<div class="flex items-center justify-between px-2 py-1">
+							<span>{h.emoji} {h.name} × {h.quantity}</span>
+							<span class="flex items-center gap-1.5">
+								<span class="text-stone-400">
+									{h.plantedOn}
+									{h.endedOn ? `→ ${h.endedOn}` : '→ growing'}
+								</span>
+								<button class="rounded px-1.5 hover:bg-stone-200" title="Edit record" onclick={() => openEdit(h)}>✏️</button>
+							</span>
+						</div>
+						{#if editingId === h.id}
+							<div class="px-2 pb-2">{@render editForm()}</div>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -254,3 +330,52 @@ async function removePlot() {
 		<button class="text-red-600 hover:underline" onclick={removePlot}>Delete plot</button>
 	</div>
 </div>
+
+{#snippet editForm()}
+	<div class="rounded-lg border border-sky-200 bg-sky-50/60 p-3">
+		<p class="mb-2 text-xs font-bold uppercase tracking-wide text-sky-800">Fix planting record</p>
+		<label class="mb-2 block text-xs font-medium text-stone-600">
+			Plant
+			<select class="mt-1 w-full rounded-lg border border-stone-300 bg-white px-2 py-1" bind:value={editPlantId}>
+				{#each catalog as p (p.id)}
+					<option value={p.id}>{p.emoji} {p.name}</option>
+				{/each}
+			</select>
+		</label>
+		<div class="mb-1 grid grid-cols-3 gap-2">
+			<label class="block text-xs font-medium text-stone-600">
+				Qty
+				<input
+					type="number"
+					min="1"
+					step="1"
+					class="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1"
+					bind:value={editQty}
+				/>
+			</label>
+			<label class="block text-xs font-medium text-stone-600">
+				Planted
+				<input type="date" class="mt-1 w-full rounded-lg border border-stone-300 px-1 py-1" bind:value={editPlantedOn} />
+			</label>
+			<label class="block text-xs font-medium text-stone-600">
+				Harvested
+				<input type="date" class="mt-1 w-full rounded-lg border border-stone-300 px-1 py-1" bind:value={editEndedOn} />
+			</label>
+		</div>
+		<p class="text-[11px] text-stone-400">Empty "Harvested" = still growing.</p>
+		{#if editErr}<p class="mt-1 rounded bg-red-50 px-2 py-1 text-xs text-red-700">{editErr}</p>{/if}
+		<div class="mt-2 flex items-center gap-2">
+			<button
+				class="rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+				disabled={editBusy}
+				onclick={saveEdit}>{editBusy ? 'Saving…' : 'Save'}</button
+			>
+			<button class="rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50" onclick={removeEditing}>
+				🗑 Delete
+			</button>
+			<button class="ml-auto rounded-lg px-2 py-1 text-xs hover:bg-stone-100" onclick={() => (editingId = null)}>
+				Cancel
+			</button>
+		</div>
+	</div>
+{/snippet}
