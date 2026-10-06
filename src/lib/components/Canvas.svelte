@@ -91,6 +91,163 @@ type Drag =
 			oh: number;
 	  };
 
+// Touch gestures: 1 finger pans (tap = select, long-press = editor),
+// 2 fingers pinch-zoom around the midpoint, selected-plot corners resize.
+type TouchDrag =
+	| { kind: 'tap'; sx: number; sy: number; plotId: number | null; moved: boolean }
+	| { kind: 'pan'; sx: number; sy: number; v0: { vx: number; vy: number; scale: number } }
+	| { kind: 'corner'; plotId: number; corner: 'nw' | 'ne' | 'sw' | 'se'; ox: number; oy: number; ow: number; oh: number };
+let touchDrag: TouchDrag | null = null;
+let pinch: { d0: number; mx0: number; my0: number; v0: { vx: number; vy: number; scale: number } } | null = null;
+const touches = new Map<number, { x: number; y: number }>();
+let longT = 0;
+let lastCtx = { id: -1, t: 0 };
+
+function fireContext(id: number, cx: number, cy: number) {
+	// iOS can fire both our long-press timer and a native contextmenu — dedupe.
+	const now = Date.now();
+	if (lastCtx.id === id && now - lastCtx.t < 800) return;
+	lastCtx = { id, t: now };
+	onplotcontext(id, cx, cy);
+}
+
+function applyResize(r: { ox: number; oy: number; ow: number; oh: number; corner: 'nw' | 'ne' | 'sw' | 'se' }, wx: number, wy: number) {
+	const X = Math.max(0, wx),
+		Y = Math.max(0, wy);
+	if (r.corner === 'se') {
+		r.ow = Math.max(1, Math.ceil(X - r.ox));
+		r.oh = Math.max(1, Math.ceil(Y - r.oy));
+	} else if (r.corner === 'ne') {
+		r.ow = Math.max(1, Math.ceil(X - r.ox));
+		const nh = Math.max(1, Math.ceil(r.oy + r.oh - Y));
+		r.oy = r.oy + r.oh - nh;
+		r.oh = nh;
+	} else if (r.corner === 'sw') {
+		const nw = Math.max(1, Math.ceil(r.ox + r.ow - X));
+		r.ox = r.ox + r.ow - nw;
+		r.ow = nw;
+		r.oh = Math.max(1, Math.ceil(Y - r.oy));
+	} else {
+		const nw = Math.max(1, Math.ceil(r.ox + r.ow - X));
+		const nh = Math.max(1, Math.ceil(r.oy + r.oh - Y));
+		r.ox = r.ox + r.ow - nw;
+		r.oy = r.oy + r.oh - nh;
+		r.ow = nw;
+		r.oh = nh;
+	}
+}
+
+function touchDown(e: PointerEvent) {
+	const el = canvas;
+	if (!el) return;
+	el.setPointerCapture(e.pointerId);
+	touches.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+	if (touches.size === 2) {
+		clearTimeout(longT);
+		touchDrag = null;
+		const [a, b] = [...touches.values()];
+		pinch = { d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mx0: (a.x + b.x) / 2, my0: (a.y + b.y) / 2, v0: { ...view } };
+		return;
+	}
+	if (touches.size > 2) return;
+	const px = e.offsetX,
+		py = e.offsetY;
+	const ch = cornerAt(px, py);
+	if (ch) {
+		touchDrag = { kind: 'corner', plotId: ch.plot.id, corner: ch.corner, ox: ch.plot.x, oy: ch.plot.y, ow: ch.plot.w, oh: ch.plot.h };
+		draw();
+		return;
+	}
+	const w = toWorld(px, py);
+	const hit = hitTest(Math.floor(w.x), Math.floor(w.y));
+	touchDrag = { kind: 'tap', sx: px, sy: py, plotId: hit?.id ?? null, moved: false };
+	if (hit) {
+		const id = hit.id,
+			cx = e.clientX,
+			cy = e.clientY;
+		longT = window.setTimeout(() => {
+			touchDrag = null;
+			fireContext(id, cx, cy);
+		}, 500);
+	}
+}
+
+function touchMove(e: PointerEvent) {
+	if (!touches.has(e.pointerId)) return;
+	const px = e.offsetX,
+		py = e.offsetY;
+	touches.set(e.pointerId, { x: px, y: py });
+	if (pinch && touches.size >= 2) {
+		const [a, b] = [...touches.values()];
+		const d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+		const mx = (a.x + b.x) / 2,
+			my = (a.y + b.y) / 2;
+		userTouched = true;
+		const ns = Math.min(160, Math.max(6, (pinch.v0.scale * d) / pinch.d0));
+		// keep the world point under the start-midpoint pinned to the live midpoint
+		const wx = pinch.mx0 / pinch.v0.scale + pinch.v0.vx;
+		const wy = pinch.my0 / pinch.v0.scale + pinch.v0.vy;
+		view.scale = ns;
+		view.vx = wx - mx / ns;
+		view.vy = wy - my / ns;
+		draw();
+		return;
+	}
+	const td = touchDrag;
+	if (!td) return;
+	if (td.kind === 'tap') {
+		if (Math.hypot(px - td.sx, py - td.sy) < 10) return;
+		clearTimeout(longT);
+		touchDrag = { kind: 'pan', sx: px, sy: py, v0: { ...view } };
+		return;
+	}
+	if (td.kind === 'pan') {
+		userTouched = true;
+		view.vx = td.v0.vx - (px - td.sx) / td.v0.scale;
+		view.vy = td.v0.vy - (py - td.sy) / td.v0.scale;
+		draw();
+		return;
+	}
+	const w = toWorld(px, py);
+	applyResize(td, w.x, w.y);
+	draw();
+}
+
+function touchUp(e: PointerEvent) {
+	const el = canvas;
+	const had = touches.delete(e.pointerId);
+	if (el && el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+	if (pinch) {
+		if (touches.size < 2) {
+			pinch = null;
+			// remaining finger keeps panning from where it is — no jump
+			const rest = [...touches.values()][0];
+			touchDrag = rest ? { kind: 'pan', sx: rest.x, sy: rest.y, v0: { ...view } } : null;
+		}
+		return;
+	}
+	clearTimeout(longT);
+	if (!had) return;
+	const td = touchDrag;
+	touchDrag = null;
+	if (!td || td.kind === 'pan') {
+		draw();
+		return;
+	}
+	if (td.kind === 'corner') onresized(td.plotId, Math.max(0, td.ox), Math.max(0, td.oy), td.ow, td.oh);
+	else if (!td.moved) onselect(td.plotId);
+	draw();
+}
+
+function onPointerCancel(e: PointerEvent) {
+	if (e.pointerType !== 'touch') return;
+	touches.delete(e.pointerId);
+	clearTimeout(longT);
+	touchDrag = null;
+	pinch = null;
+	draw();
+}
+
 const FAMILY_COLORS: Record<string, string> = {
 	Solanaceae: '#e74c3c',
 	Brassicaceae: '#16a34a',
@@ -497,6 +654,10 @@ function onPointerDown(e: PointerEvent) {
 	if (e.button === 2) return; // right button is reserved for the context menu
 	const el = canvas;
 	if (!el) return;
+	if (e.pointerType === 'touch') {
+		touchDown(e);
+		return;
+	}
 	el.setPointerCapture(e.pointerId);
 	const px = e.offsetX,
 		py = e.offsetY;
@@ -550,6 +711,10 @@ function onPointerDown(e: PointerEvent) {
 }
 
 function onPointerMove(e: PointerEvent) {
+	if (e.pointerType === 'touch') {
+		touchMove(e);
+		return;
+	}
 	const px = e.offsetX,
 		py = e.offsetY;
 	if (!drag) {
@@ -575,29 +740,7 @@ function onPointerMove(e: PointerEvent) {
 		if (drag.dx !== 0 || drag.dy !== 0) drag.moved = true;
 	} else if (drag.mode === 'resize') {
 		const w = toWorld(px, py);
-		const wx = Math.max(0, w.x),
-			wy = Math.max(0, w.y);
-		if (drag.corner === 'se') {
-			drag.ow = Math.max(1, Math.ceil(wx - drag.ox));
-			drag.oh = Math.max(1, Math.ceil(wy - drag.oy));
-		} else if (drag.corner === 'ne') {
-			drag.ow = Math.max(1, Math.ceil(wx - drag.ox));
-			const nh = Math.max(1, Math.ceil(drag.oy + drag.oh - wy));
-			drag.oy = drag.oy + drag.oh - nh;
-			drag.oh = nh;
-		} else if (drag.corner === 'sw') {
-			const nw = Math.max(1, Math.ceil(drag.ox + drag.ow - wx));
-			drag.ox = drag.ox + drag.ow - nw;
-			drag.ow = nw;
-			drag.oh = Math.max(1, Math.ceil(wy - drag.oy));
-		} else {
-			const nw = Math.max(1, Math.ceil(drag.ox + drag.ow - wx));
-			const nh = Math.max(1, Math.ceil(drag.oy + drag.oh - wy));
-			drag.ox = drag.ox + drag.ow - nw;
-			drag.oy = drag.oy + drag.oh - nh;
-			drag.ow = nw;
-			drag.oh = nh;
-		}
+		applyResize(drag, w.x, w.y);
 	}
 	draw();
 }
@@ -605,6 +748,10 @@ function onPointerMove(e: PointerEvent) {
 function onPointerUp(e: PointerEvent) {
 	const el = canvas;
 	if (!el) return;
+	if (e.pointerType === 'touch') {
+		touchUp(e);
+		return;
+	}
 	el.releasePointerCapture(e.pointerId);
 	if (!drag) return;
 	const d = drag;
@@ -635,7 +782,7 @@ function onContextMenu(e: MouseEvent) {
 	const rect = el.getBoundingClientRect();
 	const w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
 	const hit = hitTest(Math.floor(w.x), Math.floor(w.y));
-	if (hit) onplotcontext(hit.id, e.clientX, e.clientY);
+	if (hit) fireContext(hit.id, e.clientX, e.clientY);
 }
 
 // Wheel zooms at cursor (no modifier needed); horizontal-dominant
@@ -700,10 +847,12 @@ const cursor = $derived(
 
 <canvas
 	bind:this={canvas}
+	class="touch-none select-none [-webkit-touch-callout:none]"
 	style:cursor={cursor}
 	onpointerdown={onPointerDown}
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
+	onpointercancel={onPointerCancel}
 	onwheel={onWheel}
 	oncontextmenu={onContextMenu}
 ></canvas>

@@ -40,8 +40,8 @@ async function newGarden() {
 </script>
 
 <div class="flex h-screen flex-col">
-	<header class="flex items-center gap-4 border-b border-stone-300 bg-white px-4 py-2 shadow-sm">
-		<div class="flex items-center gap-2 text-lg font-bold text-green-800">🌱 Petal Plot</div>
+	<header class="flex items-center gap-4 border-b border-stone-300 bg-white px-4 py-2 shadow-sm max-sm:gap-2 max-sm:px-2">
+		<div class="text-lg font-bold text-green-800">🌱 <span class="max-sm:hidden">Petal Plot</span></div>
 
 		<select
 			class="rounded border border-stone-300 bg-white px-2 py-1 text-sm"
@@ -55,14 +55,11 @@ async function newGarden() {
 				<option value={g.id}>{g.name}</option>
 			{/each}
 		</select>
-		<button
-			class="rounded bg-green-700 px-2 py-1 text-sm text-white hover:bg-green-800"
-			onclick={newGarden}
-		>
-			＋ New garden
+		<button class="rounded bg-green-700 px-2 py-1 text-sm text-white hover:bg-green-800" onclick={newGarden}>
+			＋<span class="max-sm:hidden"> New garden</span>
 		</button>
 
-		<div class="ml-auto flex items-center gap-3">
+		<div class="ml-auto flex items-center gap-3 max-sm:gap-1.5">
 			{#if store.daysAgo > 0}
 				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold tracking-wide text-amber-800">
 					REPLAY
@@ -70,8 +67,8 @@ async function newGarden() {
 			{/if}
 			<label class="flex items-center gap-2 text-sm">
 				🕰️
-				<input type="range" min="0" max="365" bind:value={store.daysAgo} class="w-52" />
-				<span class="w-24 tabular-nums font-medium">{asOfDate()}</span>
+				<input type="range" min="0" max="365" bind:value={store.daysAgo} class="w-52 max-sm:w-24" />
+				<span class="w-24 tabular-nums font-medium max-sm:w-20 max-sm:text-xs">{asOfDate()}</span>
 			</label>
 			{#if store.daysAgo > 0}
 				<button
@@ -92,9 +89,9 @@ async function newGarden() {
 						<li>Click plot → open panel (plant/harvest/history)</li>
 						<li>Drag plot → move · corner handles → resize</li>
 						<li>Right-click a plot → edit name, type, size &amp; notes</li>
-						<li>Select plot → dashed planting bands draggable to reposition rows</li>
-						<li>Scroll / pinch → zoom at cursor</li>
-						<li>Side swipe / space + drag → pan</li>
+						<li>Touch: 1 finger drag → pan · tap → select</li>
+						<li>Touch: pinch → zoom · long-press plot → edit popover</li>
+						<li>Scroll → zoom at cursor · space + drag → pan</li>
 						<li>🏷️ (`l`) → show/hide plot labels (off by default)</li>
 						<li>Esc → close panels</li>
 						<li>North ↑ compass · view auto-saves per garden</li>

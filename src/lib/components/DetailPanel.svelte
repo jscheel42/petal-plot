@@ -136,7 +136,7 @@ async function removePlot() {
 }
 </script>
 
-<div class="absolute inset-y-0 right-0 z-10 flex w-96 max-w-full flex-col border-l border-stone-300 bg-white shadow-2xl">
+<div class="absolute inset-y-0 right-0 z-10 flex w-96 max-w-full flex-col border-l border-stone-300 bg-white shadow-2xl max-sm:inset-x-0 max-sm:top-auto max-sm:bottom-0 max-sm:h-[55vh] max-sm:w-full max-sm:rounded-t-2xl max-sm:border-l-0 max-sm:border-t">
 	<div class="flex items-center justify-between border-b border-stone-200 px-4 py-3">
 		<h2 class="text-lg font-semibold">{selected.name}</h2>
 		<button class="rounded px-2 py-0.5 text-stone-500 hover:bg-stone-100" onclick={onClose}>✕</button>
