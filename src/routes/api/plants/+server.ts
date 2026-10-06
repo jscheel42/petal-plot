@@ -9,13 +9,14 @@ export const GET: RequestHandler = async () => {
 		.select({
 			id: plant.id,
 			name: plant.name,
+			variety: plant.variety,
 			family: plant.family,
 			emoji: plant.emoji,
 			spacing: plant.spacing,
 			sun: plant.sun
 		})
 		.from(plant)
-		.orderBy(asc(plant.family), asc(plant.name))
+		.orderBy(asc(plant.family), asc(plant.name), asc(plant.variety))
 		.all();
 	return json({ plants: rows });
 };

@@ -32,12 +32,13 @@ export const plant = sqliteTable(
 	{
 		id: integer('id').primaryKey({ autoIncrement: true }),
 		name: text('name').notNull(),
+		variety: text('variety').notNull().default(''),
 		family: text('family').notNull(),
 		emoji: text('emoji').notNull(),
 		spacing: real('spacing').notNull(),
 		sun: text('sun', { enum: ['full', 'partial', 'shade'] }).notNull()
 	},
-	(t) => [uniqueIndex('plant_name_idx').on(t.name)]
+	(t) => [uniqueIndex('plant_name_variety_idx').on(t.name, t.variety)]
 );
 
 export const planting = sqliteTable(

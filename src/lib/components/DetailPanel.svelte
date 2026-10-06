@@ -4,11 +4,12 @@ import { api } from '#lib/api';
 import { asOfDate, isoDaysAgo } from '#lib/state.svelte.js';
 
 
-type PlantRow = { id: number; name: string; family: string; emoji: string; spacing: number; sun: string };
+type PlantRow = { id: number; name: string; variety: string; family: string; emoji: string; spacing: number; sun: string };
 type HistoryRow = {
 	id: number;
 	plantId: number;
 	name: string;
+	variety: string;
 	emoji: string;
 	family: string;
 	quantity: number;
@@ -35,6 +36,7 @@ let {
 			id: number;
 			plantId: number;
 			name: string;
+			variety: string;
 			family: string;
 			emoji: string;
 			quantity: number;
@@ -95,10 +97,21 @@ const filtered = $derived(
 		? catalog.filter(
 				(p) =>
 					p.name.toLowerCase().includes(search.toLowerCase()) ||
+					p.variety.toLowerCase().includes(search.toLowerCase()) ||
 					p.family.toLowerCase().includes(search.toLowerCase())
 			)
 		: catalog
 );
+// Catalog arrives sorted family → name → variety; collapse into menu groups.
+const groups = $derived.by(() => {
+	const out: { family: string; items: PlantRow[] }[] = [];
+	for (const p of filtered) {
+		const last = out[out.length - 1];
+		if (last && last.family === p.family) last.items.push(p);
+		else out.push({ family: p.family, items: [p] });
+	}
+	return out;
+});
 
 async function plant() {
 	const p = pickedPlant;
@@ -224,7 +237,7 @@ async function removePlot() {
 					<li class="rounded-md bg-stone-50">
 						<div class="flex items-center justify-between px-2 py-1.5">
 							<span>
-								{pl.emoji} {pl.name} × {pl.quantity}
+								{pl.emoji} {pl.name}{pl.variety ? ` · ${pl.variety}` : ''} × {pl.quantity}
 								<span class="text-xs text-stone-400">at ({pl.fx}, {pl.fy}) {pl.fw}×{pl.fh} ft</span>
 							</span>
 							<span class="flex items-center gap-1.5">
@@ -261,17 +274,22 @@ async function removePlot() {
 					bind:value={search}
 				/>
 				<div class="mt-2 max-h-48 overflow-y-auto rounded border border-stone-200 bg-white">
-					{#each filtered as p (p.id)}
-						<button
-							class="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-green-50 {pickedPlant?.id ===
-							p.id
-								? 'bg-green-100'
-								: ''}"
-							onclick={() => (pickedPlant = p)}
-						>
-							<span>{p.emoji} {p.name}</span>
-							<span class="text-xs text-stone-400">{p.family} · {p.spacing}ft · {p.sun}</span>
-						</button>
+					{#each groups as g (g.family)}
+						<div class="sticky top-0 z-[1] bg-stone-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-stone-500">
+							{g.family}
+						</div>
+						{#each g.items as p (p.id)}
+							<button
+								class="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-green-50 {pickedPlant?.id ===
+								p.id
+									? 'bg-green-100'
+									: ''}"
+								onclick={() => (pickedPlant = p)}
+							>
+								<span>{p.emoji} {p.name}{p.variety ? ` · ${p.variety}` : ''}</span>
+								<span class="text-xs text-stone-400">{p.spacing}ft · {p.sun}</span>
+							</button>
+						{/each}
 					{/each}
 				</div>
 				{#if pickedPlant}
@@ -308,7 +326,7 @@ async function removePlot() {
 				{#each history as h (h.id)}
 					<li class="rounded-md bg-stone-50">
 						<div class="flex items-center justify-between px-2 py-1">
-							<span>{h.emoji} {h.name} × {h.quantity}</span>
+							<span>{h.emoji} {h.name}{h.variety ? ` · ${h.variety}` : ''} × {h.quantity}</span>
 							<span class="flex items-center gap-1.5">
 								<span class="text-stone-400">
 									{h.plantedOn}
@@ -338,7 +356,7 @@ async function removePlot() {
 			Plant
 			<select class="mt-1 w-full rounded-lg border border-stone-300 bg-white px-2 py-1" bind:value={editPlantId}>
 				{#each catalog as p (p.id)}
-					<option value={p.id}>{p.emoji} {p.name}</option>
+					<option value={p.id}>{p.emoji} {p.name}{p.variety ? ` · ${p.variety}` : ''}</option>
 				{/each}
 			</select>
 		</label>

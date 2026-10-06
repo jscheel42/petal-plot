@@ -36,6 +36,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 						plotId: planting.plotId,
 						plantId: plant.id,
 						name: plant.name,
+						variety: plant.variety,
 						family: plant.family,
 						emoji: plant.emoji,
 						quantity: planting.quantity,

@@ -10,6 +10,7 @@ type PlantingView = {
 	id: number;
 	plantId: number;
 	name: string;
+	variety: string;
 	family: string;
 	emoji: string;
 	quantity: number;

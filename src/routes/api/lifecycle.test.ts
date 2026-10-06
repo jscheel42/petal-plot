@@ -8,6 +8,7 @@ import { POST as addPlanting } from './plots/[id]/plantings/+server.ts';
 import { DELETE as deletePlanting, PATCH as patchPlanting } from './plantings/[id]/+server.ts';
 import { GET as getHistory } from './plots/[id]/history/+server.ts';
 import { PATCH as patchPlot } from './plots/[id]/+server.ts';
+import { GET as getPlants } from './plants/+server.ts';
 
 // Alias-resolved harness boots the ephemeral D1 + applies migrations/seed.
 await testDb();
@@ -513,5 +514,37 @@ describe('planting record edits', () => {
 			method: 'DELETE'
 		});
 		expect(again.status).toBe(404);
+	});
+});
+
+// Catalog hierarchy: family → plant → variety (unique per name+variety).
+describe('plant catalog varieties', () => {
+	it('lists Sunshrine Blueberry under Ericaceae', async () => {
+		const r = await call<{ plants: { id: number; name: string; variety: string; family: string }[] }>(
+			getPlants as Handler
+		);
+		expect(r.status).toBe(200);
+		const bb = r.json.plants.find((p) => p.name === 'Blueberry');
+		expect(bb?.variety).toBe('Sunshrine');
+		expect(bb?.family).toBe('Ericaceae');
+	});
+
+	it('plants a variety and reports it in history', async () => {
+		const bed = await call<{ plot: { id: number } }>(createPlot as Handler, {
+			params: { id: String(gardenId) },
+			body: { name: 'BerryBed', type: 'container', x: 60, y: 0, w: 4, h: 4 }
+		});
+		expect(bed.status).toBe(201);
+		const plants = await call<{ plants: { id: number; name: string }[] }>(getPlants as Handler);
+		const bbId = plants.json.plants.find((p) => p.name === 'Blueberry')?.id ?? 0;
+		const p = await call<{ planting: { id: number } }>(addPlanting as Handler, {
+			params: { id: String(bed.json.plot.id) },
+			body: { plantId: bbId, quantity: 1, plantedOn: '2026-04-01' }
+		});
+		expect(p.status).toBe(201);
+		const h = await call<{ history: { name: string; variety: string }[] }>(getHistory as Handler, {
+			params: { id: String(bed.json.plot.id) }
+		});
+		expect(h.json.history[0]?.variety).toBe('Sunshrine');
 	});
 });
