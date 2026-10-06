@@ -72,6 +72,7 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 | Move / resize | drag plot body / corner handles |
 | Reposition plantings | select plot → drag its dashed band (whole-feet snap; server validates bounds + band overlap) |
 | Edit / remove planting history | ✏️ any row in the DetailPanel — change plant, qty, planted/harvest dates (empty harvest = reactivates), or delete the record |
+| Varieties | catalog is Family → Plant → Variety (e.g. Ericaceae → Blueberry → 'Sunshrine'); the plant picker groups by family and variety text is searchable |
 | Edit properties | right-click (touch: long-press) a plot → popover (name, type, size, notes, delete) |
 | Replay | 🕰️ slider in the header |
 | North | compass rose, top-left (garden north = up) |
