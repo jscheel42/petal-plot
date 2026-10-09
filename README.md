@@ -67,16 +67,22 @@ Cloudflare Access: the edge enforces it, and `src/hooks.server.ts` re-validates 
 injected `Cf-Access-Jwt-Assertion` JWT (RS256, aud, exp) so writes fail closed if the
 Access app is ever removed while the secrets remain set. Dev has no secrets → writes open.
 
-One-time dashboard setup (Zero Trust free ≤50 users):
+One-time setup:
 
-1. **Zero Trust → Access → Applications → Add → Self-hosted.**
-   Destination: `petal-plot.joshuascheel.com`; **Allowed actions: POST, PATCH, DELETE only**
-   (GET excluded → anonymous browsing stays open).
-2. **Policy:** Action Allow · Rule `emails` equals `jscheel42@gmail.com` ·
-   Login method: One-time PIN (add Google IdP for the button).
-3. Copy the app's **AUD tag**, then:
-   `npx wrangler secret put ACCESS_AUD` (paste tag) and
-   `npx wrangler secret put ACCESS_TEAM` (your Zero Trust subdomain), then redeploy.
+1. **Zero Trust → Access → Applications → Add → Self-hosted.** Destination
+   `petal-plot.joshuascheel.com`. The wizard has no method checkboxes (they are
+   API-only now) — leave defaults and finish; step 2 trims the methods.
+2. **Policy** (inside the wizard): Action **Allow** · add identity rule
+   `emails` equals `jscheel42@gmail.com` · Login method: One-time PIN
+   (add Google IdP for the button).
+3. **Trim allowed actions to writes** (anonymous GETs must pass the edge):
+   create a Custom API token (My Profile → API Tokens → Create Token →
+   Account → `Access: Apps and Policies` → `Edit`), then
+   `CLOUDFLARE_API_TOKEN=<token> node scripts/configure-access.mjs`
+   — sets `allowed_actions: POST,PATCH,DELETE` and prints the app's AUD tag.
+   ⚠️ Until this runs, anonymous visitors can't even read (app covers GET too).
+4. `npx wrangler secret put ACCESS_AUD` (AUD tag from step 3) +
+   `npx wrangler secret put ACCESS_TEAM` (Zero Trust subdomain), then redeploy.
 
 UX: a blocked write shows the 🔒 "Sign in to edit" banner; its button POSTs a hidden
 form to `/api/auth/sign-in`, Access runs the login, the handler bounces back to `/`.
