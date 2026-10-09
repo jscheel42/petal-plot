@@ -5,8 +5,11 @@ import type { D1Database, ExecutionContext } from '@cloudflare/workers-types';
 declare global {
 	namespace App {
 		interface Platform {
-			env: { DB: D1Database };
+			env: { DB: D1Database; ACCESS_TEAM?: string; ACCESS_AUD?: string };
 			ctx: ExecutionContext;
+		}
+		interface Locals {
+			email?: string;
 		}
 	}
 }

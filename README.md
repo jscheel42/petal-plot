@@ -60,6 +60,28 @@ Free tier covers this comfortably (Workers: 100k requests/day; D1: 5M reads +
 100k writes/day, 5 GB). Data is durable across restarts with 7-day point-in-time
 restore (30 days on Workers Paid) — no backup sidecar to babysit.
 
+## Sign-in (Cloudflare Access) — anonymous read-only, owner writes
+
+Anonymous visitors GET everything (read-only). Writes (`POST/PATCH/DELETE`) require
+Cloudflare Access: the edge enforces it, and `src/hooks.server.ts` re-validates the
+injected `Cf-Access-Jwt-Assertion` JWT (RS256, aud, exp) so writes fail closed if the
+Access app is ever removed while the secrets remain set. Dev has no secrets → writes open.
+
+One-time dashboard setup (Zero Trust free ≤50 users):
+
+1. **Zero Trust → Access → Applications → Add → Self-hosted.**
+   Destination: `petal-plot.joshuascheel.com`; **Allowed actions: POST, PATCH, DELETE only**
+   (GET excluded → anonymous browsing stays open).
+2. **Policy:** Action Allow · Rule `emails` equals `jscheel42@gmail.com` ·
+   Login method: One-time PIN (add Google IdP for the button).
+3. Copy the app's **AUD tag**, then:
+   `npx wrangler secret put ACCESS_AUD` (paste tag) and
+   `npx wrangler secret put ACCESS_TEAM` (your Zero Trust subdomain), then redeploy.
+
+UX: a blocked write shows the 🔒 "Sign in to edit" banner; its button POSTs a hidden
+form to `/api/auth/sign-in`, Access runs the login, the handler bounces back to `/`.
+
+
 ## Canvas controls
 
 | Action | Input |
@@ -82,10 +104,11 @@ restore (30 days on Workers Paid) — no backup sidecar to babysit.
 ## Layout
 
 ```
-src/lib/server/    schema.ts · db.ts · rotation.ts · layout.ts · test-db.ts
-src/routes/api/    gardens · plots · plantings · plants catalog
+src/lib/server/    schema.ts · db.ts · rotation.ts · layout.ts · access.ts · test-db.ts
+src/routes/api/    gardens · plots · plantings · plants catalog · auth/sign-in
 src/lib/components/ Canvas.svelte · DetailPanel.svelte · PlotEditor.svelte
-drizzle/           SQL migrations (0000 schema, 0001 seed, 0002 planting position) — applied by wrangler
+src/hooks.server.ts Access JWT gate (writes only)
+drizzle/           SQL migrations (0000 schema … 0005 seeds) — applied by wrangler
 scripts/           one-off SQL (Cloud Run data port)
 wrangler.jsonc     worker + D1 binding + assets config
 ```

@@ -48,6 +48,15 @@ function showToast(msg: string) {
 	setTimeout(() => (toast = null), 3500);
 }
 
+// Cloudflare Access: anonymous visitors browse; a blocked write raises
+// 'pp:sign-in-required' (from api.ts) and this banner offers the login.
+let needSignIn = $state(false);
+$effect(() => {
+	const h = () => (needSignIn = true);
+	window.addEventListener('ppsignin', h);
+	return () => window.removeEventListener('ppsignin', h);
+});
+
 function onPlotContext(plotId: number, x: number, y: number) {
 	ctx = { plotId, x, y };
 }
@@ -212,3 +221,15 @@ const createClash = $derived(
 		{toast}
 	</div>
 {/if}
+
+{#if needSignIn}
+	<div class="fixed left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-sky-700 px-4 py-2 text-sm text-white shadow-lg">
+		🔒 Sign in to edit — anonymous visitors are read-only
+		<button
+			class="rounded bg-white px-2 py-0.5 font-medium text-sky-700 hover:bg-sky-50"
+			onclick={() => document.querySelector<HTMLFormElement>('form#pp-signin')?.submit()}>Sign in</button
+		>
+	</div>
+{/if}
+<form id="pp-signin" method="POST" action="/api/auth/sign-in" class="hidden"></form>
+<!-- signin listener registered in the script -->
