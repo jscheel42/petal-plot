@@ -90,8 +90,9 @@ Change the password anytime: same two commands with a new value.
 | --- | --- |
 | Pan | trackpad side-swipe / space+drag · touch: 1-finger drag |
 | Zoom | scroll (at cursor) · touch: pinch (at midpoint) · ＋/− buttons · `+` `−` keys |
-| Fit / center | ⛶ button (`0`) · ◎ selected plot (`c`) |
-| Create plot | drag on empty grid |
+| Fit / center | ⛶ button (`0`) fits the whole grid · ◎ selected plot (`c`) |
+| Create plot | drag on empty grid (clamped to the grid bounds) |
+| Grid bounds & style | ⚙️ button — manual grid W×H (ft), **Fit** = plots bounding box + buffer X (snapped to 5 ft), outside-area color picker + swatches, or **Auto-size to content** (plots bbox + 5 ft). Persisted per garden in localStorage; drags/creates/⛶ all respect the bounds |
 | Open panel | click/tap a plot |
 | Move / resize | drag plot body / corner handles |
 | Reposition plantings | select plot → drag its dashed band (whole-feet snap; server validates bounds + band overlap) |
@@ -101,7 +102,7 @@ Change the password anytime: same two commands with a new value.
 | Replay | 🕰️ slider in the header |
 | North | compass rose, top-left (garden north = up) |
 | Labels | 🏷️ button or `l` key toggles `Name · W×Hft` labels — **off by default**, choice persisted; ⚠️ warnings always shown |
-| View memory | pan/zoom auto-saved per garden; reload restores it. First visit fits all plots |
+| View memory | pan/zoom auto-saved per garden; reload restores it. First visit fits the grid |
 
 ## Layout
 

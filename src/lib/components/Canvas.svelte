@@ -113,8 +113,8 @@ function fireContext(id: number, cx: number, cy: number) {
 }
 
 function applyResize(r: { ox: number; oy: number; ow: number; oh: number; corner: 'nw' | 'ne' | 'sw' | 'se' }, wx: number, wy: number) {
-	const X = Math.max(0, wx),
-		Y = Math.max(0, wy);
+	const X = Math.min(Math.max(0, wx), grid.w),
+		Y = Math.min(Math.max(0, wy), grid.h);
 	if (r.corner === 'se') {
 		r.ow = Math.max(1, Math.ceil(X - r.ox));
 		r.oh = Math.max(1, Math.ceil(Y - r.oy));
@@ -235,7 +235,7 @@ function touchUp(e: PointerEvent) {
 		draw();
 		return;
 	}
-	if (td.kind === 'corner') onresized(td.plotId, Math.max(0, td.ox), Math.max(0, td.oy), td.ow, td.oh);
+	if (td.kind === 'corner') onresized(td.plotId, Math.max(0, td.ox), Math.max(0, td.oy), Math.min(td.ow, grid.w - Math.max(0, td.ox)), Math.min(td.oh, grid.h - Math.max(0, td.oy)));
 	else if (!td.moved) onselect(td.plotId);
 	draw();
 }
@@ -344,27 +344,17 @@ function dragRect(d: Drag): { x: number; y: number; w: number; h: number; ignore
 	return { x: Math.max(0, d.ox), y: Math.max(0, d.oy), w: d.ow, h: d.oh, ignoreId: d.id };
 }
 
-function fit(plotsToDraw: PlotView[]) {
+function fit() {
 	const el = canvas;
 	if (!el) return;
 	const cw = el.clientWidth,
 		ch = el.clientHeight;
-	let minX = 0,
-		minY = 0,
-		maxX = 16,
-		maxY = 10;
-	for (const p of plotsToDraw) {
-		minX = Math.min(minX, p.x);
-		minY = Math.min(minY, p.y);
-		maxX = Math.max(maxX, p.x + p.w);
-		maxY = Math.max(maxY, p.y + p.h);
-	}
-	const spanX = maxX - minX,
-		spanY = maxY - minY;
+	const spanX = grid.w,
+		spanY = grid.h;
 	const s = Math.min(cw / spanX, ch / spanY);
 	view.scale = Math.min(60, Math.max(6, s));
-	view.vx = minX - (cw / view.scale - spanX) / 2;
-	view.vy = minY - (ch / view.scale - spanY) / 2;
+	view.vx = -(cw / view.scale - spanX) / 2;
+	view.vy = -(ch / view.scale - spanY) / 2;
 	draw();
 }
 
@@ -434,6 +424,86 @@ function toggleLabels() {
 	draw();
 }
 
+// Grid extent + outside styling: manual W×H (persisted per garden) or auto
+// = plots bbox + 5 ft snapped to 5. Drags clamp to the grid; ⛶ fits it.
+type GridSave = { auto: boolean; w: number; h: number; outside: string };
+const DEFAULT_OUTSIDE = '#d8e3c8';
+const OUTSIDE_SWATCHES = ['#d8e3c8', '#e7e0d0', '#d7dee8', '#e3d5ca', '#cfd5cf', '#b8b5ad'];
+let gridSave = $state<GridSave | null>(null);
+let styleOpen = $state(false);
+let buffer = $state(5);
+
+const autoGrid = $derived.by(() => {
+	let maxX = 16,
+		maxY = 10;
+	for (const p of plots) {
+		maxX = Math.max(maxX, p.x + p.w);
+		maxY = Math.max(maxY, p.y + p.h);
+	}
+	return { w: Math.ceil((maxX + 5) / 5) * 5, h: Math.ceil((maxY + 5) / 5) * 5 };
+});
+const grid = $derived<GridSave>(
+	gridSave && !gridSave.auto
+		? gridSave
+		: { auto: true, w: autoGrid.w, h: autoGrid.h, outside: gridSave?.outside ?? DEFAULT_OUTSIDE }
+);
+
+function loadGrid() {
+	if (gardenKey == null) {
+		gridSave = null;
+		return;
+	}
+	try {
+		const raw = localStorage.getItem(`petalPlot.grid.${gardenKey}`);
+		if (!raw) {
+			gridSave = null;
+			return;
+		}
+		const v = JSON.parse(raw) as Partial<GridSave>;
+		if (typeof v.outside !== 'string' || !/^#[0-9a-f]{6}$/i.test(v.outside)) {
+			gridSave = null;
+			return;
+		}
+		if (v.auto === true) gridSave = { auto: true, w: 0, h: 0, outside: v.outside };
+		else if (typeof v.w === 'number' && typeof v.h === 'number' && v.w >= 4 && v.h >= 4 && v.w <= 999 && v.h <= 999)
+			gridSave = { auto: false, w: Math.round(v.w), h: Math.round(v.h), outside: v.outside };
+		else gridSave = null;
+	} catch {
+		gridSave = null;
+	}
+}
+function saveGrid() {
+	if (gardenKey == null || !gridSave) return;
+	try {
+		localStorage.setItem(`petalPlot.grid.${gardenKey}`, JSON.stringify(gridSave));
+	} catch {
+		// persistence is best-effort
+	}
+}
+function applyGridSize(w: number, h: number) {
+	const W = Math.round(Number.isFinite(w) ? w : grid.w);
+	const H = Math.round(Number.isFinite(h) ? h : grid.h);
+	gridSave = { auto: false, w: Math.min(999, Math.max(4, W)), h: Math.min(999, Math.max(4, H)), outside: grid.outside };
+	saveGrid();
+}
+// bbox of all plots + buffer, snapped up to 5-ft, min 10.
+function fitGridToPlots() {
+	let maxX = 0,
+		maxY = 0;
+	for (const p of plots) {
+		maxX = Math.max(maxX, p.x + p.w);
+		maxY = Math.max(maxY, p.y + p.h);
+	}
+	const b = Math.min(200, Math.max(0, Math.round(Number.isFinite(buffer) ? buffer : 5)));
+	gridSave = { auto: false, w: Math.max(10, Math.ceil((maxX + b) / 5) * 5), h: Math.max(10, Math.ceil((maxY + b) / 5) * 5), outside: grid.outside };
+	saveGrid();
+}
+function setOutside(c: string) {
+	if (!/^#[0-9a-f]{6}$/i.test(c)) return;
+	gridSave = { auto: grid.auto, w: grid.w, h: grid.h, outside: c };
+	saveGrid();
+}
+
 function draw() {
 	const el = canvas;
 	if (!el) return;
@@ -451,38 +521,93 @@ function draw() {
 	const ctx = el.getContext('2d');
 	if (!ctx) return;
 	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-	// invalid half-plane (x,y < 0): black void, no gridlines
-	ctx.fillStyle = '#000000';
+	// outside the garden grid: custom field color
+	ctx.fillStyle = grid.outside;
 	ctx.fillRect(0, 0, cw, ch);
 
 	const s = view.scale;
-	const X0 = Math.max(0, Math.round((0 - view.vx) * s));
-	const Y0 = Math.max(0, Math.round((0 - view.vy) * s));
+	// the grid is a bounded mat: rounded sheet, drop shadow, checkerboard
+	// tint, minor/major lines, foot rulers along the top + left edges
+	const g0 = toScreen(0, 0),
+		g1 = toScreen(grid.w, grid.h);
+	const gw = g1.x - g0.x,
+		gh = g1.y - g0.y;
+	const sheet = () => {
+		ctx.beginPath();
+		ctx.roundRect(g0.x, g0.y, gw, gh, 10);
+	};
+	ctx.save();
+	ctx.shadowColor = 'rgba(0,0,0,0.28)';
+	ctx.shadowBlur = 16;
+	ctx.shadowOffsetY = 5;
 	ctx.fillStyle = '#f6f7f4';
-	ctx.fillRect(X0, Y0, cw - X0, ch - Y0);
-
-	// grid (valid region only)
-	ctx.lineWidth = 1;
-	const minX = Math.max(0, Math.floor(view.vx)),
-		maxX = Math.ceil(view.vx + cw / s);
-	const minY = Math.max(0, Math.floor(view.vy)),
-		maxY = Math.ceil(view.vy + ch / s);
-	for (let gx = minX; gx <= maxX; gx++) {
-		const X = Math.round((gx - view.vx) * s) + 0.5;
-		ctx.strokeStyle = gx % 5 === 0 ? '#d6d3d1' : '#e7e5e4';
-		ctx.beginPath();
-		ctx.moveTo(X, Y0);
-		ctx.lineTo(X, ch);
-		ctx.stroke();
+	sheet();
+	ctx.fill();
+	ctx.restore();
+	if (gw > 2 && gh > 2) {
+		ctx.save();
+		sheet();
+		ctx.clip();
+		// 5-ft checkerboard tint — subtle lawn texture
+		const bx0 = Math.max(0, Math.floor(view.vx / 5)),
+			by0 = Math.max(0, Math.floor(view.vy / 5));
+		const bx1 = Math.min(Math.ceil(grid.w / 5), Math.ceil((view.vx + cw / s) / 5)),
+			by1 = Math.min(Math.ceil(grid.h / 5), Math.ceil((view.vy + ch / s) / 5));
+		ctx.fillStyle = 'rgba(163,191,140,0.10)';
+		for (let bx = bx0; bx < bx1; bx++) {
+			for (let by = by0; by < by1; by++) {
+				if ((bx + by) % 2 !== 0) continue;
+				const b0 = toScreen(bx * 5, by * 5);
+				ctx.fillRect(b0.x, b0.y, 5 * s + 1, 5 * s + 1);
+			}
+		}
+		// gridlines: minor ft, major every 5, stronger every 10
+		ctx.lineWidth = 1;
+		const minX = Math.max(0, Math.floor(view.vx)),
+			maxX = Math.min(grid.w, Math.ceil(view.vx + cw / s));
+		const minY = Math.max(0, Math.floor(view.vy)),
+			maxY = Math.min(grid.h, Math.ceil(view.vy + ch / s));
+		for (let gx = minX; gx <= maxX; gx++) {
+			const X = Math.round((gx - view.vx) * s) + 0.5;
+			ctx.strokeStyle = gx % 10 === 0 ? '#c9c6c3' : gx % 5 === 0 ? '#d6d3d1' : '#e7e5e4';
+			ctx.beginPath();
+			ctx.moveTo(X, 0);
+			ctx.lineTo(X, ch);
+			ctx.stroke();
+		}
+		for (let gy = minY; gy <= maxY; gy++) {
+			const Y = Math.round((gy - view.vy) * s) + 0.5;
+			ctx.strokeStyle = gy % 10 === 0 ? '#c9c6c3' : gy % 5 === 0 ? '#d6d3d1' : '#e7e5e4';
+			ctx.beginPath();
+			ctx.moveTo(0, Y);
+			ctx.lineTo(cw, Y);
+			ctx.stroke();
+		}
+		// foot rulers along the sheet edges
+		if (s >= 12) {
+			ctx.fillStyle = '#a8a29e';
+			ctx.font = '600 10px ui-sans-serif, system-ui, sans-serif';
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'top';
+			for (let gx = 5; gx <= grid.w - 2; gx += 5) {
+				const X = Math.round((gx - view.vx) * s) + 0.5;
+				if (X < 10 || X > cw - 10) continue;
+				ctx.fillText(String(gx), X, g0.y + 3);
+			}
+			ctx.textAlign = 'left';
+			ctx.textBaseline = 'middle';
+			for (let gy = 5; gy <= grid.h - 2; gy += 5) {
+				const Y = Math.round((gy - view.vy) * s) + 0.5;
+				if (Y < 10 || Y > ch - 10) continue;
+				ctx.fillText(String(gy), g0.x + 4, Y);
+			}
+		}
+		ctx.restore();
 	}
-	for (let gy = minY; gy <= maxY; gy++) {
-		const Y = Math.round((gy - view.vy) * s) + 0.5;
-		ctx.strokeStyle = gy % 5 === 0 ? '#d6d3d1' : '#e7e5e4';
-		ctx.beginPath();
-		ctx.moveTo(X0, Y);
-		ctx.lineTo(cw, Y);
-		ctx.stroke();
-	}
+	ctx.strokeStyle = '#a8a29e';
+	ctx.lineWidth = 2;
+	sheet();
+	ctx.stroke();
 
 	// plots
 	for (const p of plots) {
@@ -729,11 +854,15 @@ function onPointerMove(e: PointerEvent) {
 		view.vy = drag.v0.vy - (py - drag.sy) / drag.v0.scale;
 	} else if (drag.mode === 'create') {
 		const w = toWorld(px, py);
-		drag.cx = Math.floor(w.x);
-		drag.cy = Math.floor(w.y);
+		drag.cx = Math.min(grid.w - 1, Math.floor(w.x));
+		drag.cy = Math.min(grid.h - 1, Math.floor(w.y));
 	} else if (drag.mode === 'move') {
-		drag.dx = Math.max(-drag.ox, Math.round((px - drag.sx) / view.scale));
-		drag.dy = Math.max(-drag.oy, Math.round((py - drag.sy) / view.scale));
+		const dm = drag;
+		const p = plots.find((q) => q.id === dm.id);
+		const limX = p ? grid.w - (dm.ox + p.w) : 0;
+		const limY = p ? grid.h - (dm.oy + p.h) : 0;
+		drag.dx = Math.min(limX, Math.max(-dm.ox, Math.round((px - dm.sx) / view.scale)));
+		drag.dy = Math.min(limY, Math.max(-dm.oy, Math.round((py - dm.sy) / view.scale)));
 		if (drag.dx !== 0 || drag.dy !== 0) drag.moved = true;
 	} else if (drag.mode === 'plant') {
 		drag.dx = Math.round((px - drag.sx) / view.scale);
@@ -759,13 +888,19 @@ function onPointerUp(e: PointerEvent) {
 	drag = null;
 	if (d.mode === 'create') {
 		const r = dragRect(d);
-		if (r && r.w >= 1 && r.h >= 1) oncreated({ x: Math.max(0, r.x), y: Math.max(0, r.y), w: r.w, h: r.h });
-		else onselect(null);
+		if (r && r.w >= 1 && r.h >= 1) {
+			const x = Math.max(0, r.x),
+				y = Math.max(0, r.y);
+			oncreated({ x, y, w: Math.min(r.w, grid.w - x), h: Math.min(r.h, grid.h - y) });
+		} else onselect(null);
 	} else if (d.mode === 'move') {
 		if (!d.moved) onselect(d.id);
-		else onmoved(d.id, Math.max(0, d.ox + d.dx), Math.max(0, d.oy + d.dy));
+		else {
+			const p = plots.find((q) => q.id === d.id);
+			onmoved(d.id, Math.max(0, Math.min(grid.w - (p?.w ?? 1), d.ox + d.dx)), Math.max(0, Math.min(grid.h - (p?.h ?? 1), d.oy + d.dy)));
+		}
 	} else if (d.mode === 'resize') {
-		onresized(d.id, Math.max(0, d.ox), Math.max(0, d.oy), d.ow, d.oh);
+		onresized(d.id, Math.max(0, d.ox), Math.max(0, d.oy), Math.min(d.ow, grid.w - Math.max(0, d.ox)), Math.min(d.oh, grid.h - Math.max(0, d.oy)));
 	} else if (d.mode === 'plant') {
 		const p = plots.find((q) => q.id === d.plotId);
 		const pl = p?.plantings.find((q) => q.id === d.id);
@@ -811,7 +946,7 @@ onMount(async () => {
 			zoomStep(-1);
 		} else if (e.key === '0') {
 			userTouched = true;
-			fit(plots);
+			fit();
 		} else if (e.key === 'c') {
 			centerOnSelected();
 		} else if (e.key === 'l') {
@@ -823,6 +958,18 @@ onMount(async () => {
 	});
 });
 
+// Grid config persists per garden; changing size/color repaints at once.
+$effect(() => {
+	void gardenKey;
+	loadGrid();
+});
+$effect(() => {
+	void grid.w;
+	void grid.h;
+	void grid.outside;
+	draw();
+});
+
 // Garden change: restore saved view, else fit. Plots load async — if the
 // first fit saw an empty garden, re-fit once the boxes arrive (unless the
 // user already took control of the view).
@@ -831,9 +978,9 @@ $effect(() => {
 	if (fittedFor !== gardenKey) {
 		fittedFor = gardenKey;
 		positioned = loadView();
-		if (!positioned) fit(plots);
+		if (!positioned) fit();
 	} else if (!positioned && !userTouched && plots.length > 0) {
-		fit(plots);
+		fit();
 		positioned = true;
 	} else {
 		draw();
@@ -873,7 +1020,7 @@ const cursor = $derived(
 		title="Fit garden to screen (0)"
 		onclick={() => {
 			userTouched = true;
-			fit(plots);
+			fit();
 		}}>⛶</button>
 	<button
 		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:text-stone-300"
@@ -885,4 +1032,37 @@ const cursor = $derived(
 		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100"
 		title="Toggle plot labels (l)"
 		onclick={toggleLabels}>🏷️</button>
+	<button
+		class="flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-stone-700 hover:bg-stone-100"
+		title="Grid style & bounds"
+		onclick={() => (styleOpen = !styleOpen)}>⚙️</button>
 </div>
+{#if styleOpen}
+	<div class="fixed inset-0 z-10" role="presentation" onclick={() => (styleOpen = false)}></div>
+	<div class="absolute bottom-4 left-16 z-20 w-64 rounded-xl border border-stone-200 bg-white/95 p-3 text-xs text-stone-700 shadow-lg backdrop-blur">
+		<div class="mb-1 flex items-baseline justify-between">
+			<span class="font-semibold text-stone-800">Grid size (ft)</span>
+			{#if grid.auto}<span class="text-[10px] text-stone-400">auto · plots＋5</span>{/if}
+		</div>
+		<div class="mb-2 flex items-end gap-1.5">
+			<label class="flex-1">W
+				<input class="mt-0.5 w-full rounded-md border border-stone-300 px-1.5 py-1" type="number" min="4" max="999" value={grid.w} onchange={(e) => applyGridSize(Number(e.currentTarget.value), grid.h)} />
+			</label>
+			<label class="flex-1">H
+				<input class="mt-0.5 w-full rounded-md border border-stone-300 px-1.5 py-1" type="number" min="4" max="999" value={grid.h} onchange={(e) => applyGridSize(grid.w, Number(e.currentTarget.value))} />
+			</label>
+			<label class="w-12">Buf
+				<input class="mt-0.5 w-full rounded-md border border-stone-300 px-1.5 py-1" type="number" min="0" max="200" bind:value={buffer} />
+			</label>
+			<button class="rounded-md bg-stone-800 px-2 py-1 text-white hover:bg-stone-700" title="Set grid to plots bounding box + buffer" onclick={fitGridToPlots}>Fit</button>
+		</div>
+		<div class="mb-1 font-semibold text-stone-800">Outside color</div>
+		<div class="mb-2 flex items-center gap-1.5">
+			<input class="h-7 w-9 cursor-pointer rounded-md border border-stone-300" type="color" value={grid.outside} oninput={(e) => setOutside(e.currentTarget.value)} />
+			{#each OUTSIDE_SWATCHES as c}
+				<button class="h-6 w-6 rounded-full border border-stone-300 hover:scale-110" style:background={c} title={c} onclick={() => setOutside(c)}></button>
+			{/each}
+		</div>
+		<button class="w-full rounded-md border border-stone-300 py-1 hover:bg-stone-100" onclick={() => { gridSave = { auto: true, w: 0, h: 0, outside: grid.outside }; saveGrid(); }}>Auto-size to content</button>
+	</div>
+{/if}
