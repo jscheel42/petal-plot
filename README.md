@@ -92,7 +92,7 @@ Change the password anytime: same two commands with a new value.
 | Zoom | scroll (at cursor) · touch: pinch (at midpoint) · ＋/− buttons · `+` `−` keys |
 | Fit / center | ⛶ button (`0`) fits the whole grid · ◎ selected plot (`c`) |
 | Create plot | drag on empty grid (clamped to the grid bounds) |
-| Grid bounds & style | ⚙️ button — manual grid W×H (ft), **Fit** = plots bounding box + buffer X (snapped to 5 ft), outside-area color picker + swatches, or **Auto-size to content** (plots bbox + 5 ft). Persisted per garden in localStorage; drags/creates/⛶ all respect the bounds |
+| Grid bounds & style | ⚙️ button — manual grid W×H (ft), **Fit** = plots bounding box + buffer X (snapped to 5 ft), outside-area color picker + swatches, or **Auto-size to content** (plots bbox + 5 ft). Saved on the garden row (`PATCH /api/gardens/:id` → `grid_w/grid_h/outside_color`, 0 = auto) so bounds + color sync across devices; drags/creates/⛶ all respect the bounds |
 | Open panel | click/tap a plot |
 | Move / resize | drag plot body / corner handles |
 | Reposition plantings | select plot → drag its dashed band (whole-feet snap; server validates bounds + band overlap) |

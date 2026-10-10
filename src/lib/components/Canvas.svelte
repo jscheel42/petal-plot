@@ -2,6 +2,7 @@
 // Canvas plot editor: pan/zoom grid, drag-create, move, resize.
 // World units = feet. Screen = pixels. view.vx/vy = world coord at screen origin.
 import { onMount, tick } from 'svelte';
+import { api } from '#lib/api';
 
 type PlantingView = {
 	id: number;
@@ -448,37 +449,63 @@ const grid = $derived<GridSave>(
 		: { auto: true, w: autoGrid.w, h: autoGrid.h, outside: gridSave?.outside ?? DEFAULT_OUTSIDE }
 );
 
-function loadGrid() {
+async function loadGrid() {
 	if (gardenKey == null) {
 		gridSave = null;
 		return;
 	}
+	const key = gardenKey;
+	// One-time promotion of pre-DB per-device prefs (localStorage) to the server.
+	let local: GridSave | null = null;
 	try {
-		const raw = localStorage.getItem(`petalPlot.grid.${gardenKey}`);
-		if (!raw) {
-			gridSave = null;
-			return;
+		const raw = localStorage.getItem(`petalPlot.grid.${key}`);
+		if (raw) {
+			const v = JSON.parse(raw) as Partial<GridSave>;
+			const outside = typeof v.outside === 'string' && /^#[0-9a-f]{6}$/i.test(v.outside) ? v.outside : null;
+			if (outside && v.auto === true) local = { auto: true, w: 0, h: 0, outside };
+			else if (outside && typeof v.w === 'number' && typeof v.h === 'number' && v.w >= 4 && v.w <= 999 && v.h >= 4 && v.h <= 999)
+				local = { auto: false, w: Math.round(v.w), h: Math.round(v.h), outside };
 		}
-		const v = JSON.parse(raw) as Partial<GridSave>;
-		if (typeof v.outside !== 'string' || !/^#[0-9a-f]{6}$/i.test(v.outside)) {
-			gridSave = null;
-			return;
-		}
-		if (v.auto === true) gridSave = { auto: true, w: 0, h: 0, outside: v.outside };
-		else if (typeof v.w === 'number' && typeof v.h === 'number' && v.w >= 4 && v.h >= 4 && v.w <= 999 && v.h <= 999)
-			gridSave = { auto: false, w: Math.round(v.w), h: Math.round(v.h), outside: v.outside };
-		else gridSave = null;
 	} catch {
-		gridSave = null;
+		local = null;
+	}
+	try {
+		const r = await api<{ garden: { gridW: number; gridH: number; outsideColor: string } }>(`/api/gardens/${key}`);
+		if (gardenKey !== key) return; // switched gardens mid-flight
+		const g = r.garden;
+		const outside = /^#[0-9a-f]{6}$/i.test(g.outsideColor) ? g.outsideColor : DEFAULT_OUTSIDE;
+		if (g.gridW === 0 && g.gridH === 0 && outside === DEFAULT_OUTSIDE && local) {
+			gridSave = local;
+			void api(`/api/gardens/${key}`, {
+				method: 'PATCH',
+				body: JSON.stringify({ gridW: local.auto ? 0 : local.w, gridH: local.auto ? 0 : local.h, outsideColor: local.outside })
+			})
+				.then(() => localStorage.removeItem(`petalPlot.grid.${key}`))
+				.catch(() => {
+					// view-only / offline: keep local copy on this device
+				});
+			return;
+		}
+		const manual = Number.isInteger(g.gridW) && Number.isInteger(g.gridH) && g.gridW >= 4 && g.gridH >= 4;
+		gridSave = manual ? { auto: false, w: g.gridW, h: g.gridH, outside } : { auto: true, w: 0, h: 0, outside };
+	} catch {
+		if (gardenKey === key) gridSave = local;
 	}
 }
+let gridSaveT = 0;
 function saveGrid() {
-	if (gardenKey == null || !gridSave) return;
-	try {
-		localStorage.setItem(`petalPlot.grid.${gardenKey}`, JSON.stringify(gridSave));
-	} catch {
-		// persistence is best-effort
-	}
+	if (gardenKey == null) return;
+	const key = gardenKey;
+	clearTimeout(gridSaveT);
+	gridSaveT = window.setTimeout(() => {
+		const g = grid;
+		void api(`/api/gardens/${key}`, {
+			method: 'PATCH',
+			body: JSON.stringify({ gridW: g.auto ? 0 : g.w, gridH: g.auto ? 0 : g.h, outsideColor: g.outside })
+		}).catch(() => {
+			// offline / view-only: optimistic UI stands until next change
+		});
+	}, 300);
 }
 function applyGridSize(w: number, h: number) {
 	const W = Math.round(Number.isFinite(w) ? w : grid.w);
@@ -961,7 +988,7 @@ onMount(async () => {
 // Grid config persists per garden; changing size/color repaints at once.
 $effect(() => {
 	void gardenKey;
-	loadGrid();
+	void loadGrid();
 });
 $effect(() => {
 	void grid.w;

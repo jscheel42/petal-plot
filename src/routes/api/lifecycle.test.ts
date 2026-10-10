@@ -11,6 +11,7 @@ import { PATCH as patchPlot } from './plots/[id]/+server.ts';
 import { GET as getPlants } from './plants/+server.ts';
 
 // Alias-resolved harness boots the ephemeral D1 + applies migrations/seed.
+import { GET as getGarden, PATCH as patchGarden } from './gardens/[id]/+server.ts';
 await testDb();
 
 // Minimal fake event; routes are RequestHandler, so each call site casts
@@ -546,5 +547,54 @@ describe('plant catalog varieties', () => {
 			params: { id: String(bed.json.plot.id) }
 		});
 		expect(h.json.history[0]?.variety).toBe('Sunshrine');
+	});
+});
+
+describe('garden grid prefs', () => {
+	it('defaults to auto grid + sage outside', async () => {
+		const r = await call<{ garden: { gridW: number; gridH: number; outsideColor: string } }>(getGarden as Handler, {
+			params: { id: String(gardenId) }
+		});
+		expect(r.status).toBe(200);
+		expect(r.json.garden.gridW).toBe(0);
+		expect(r.json.garden.gridH).toBe(0);
+		expect(r.json.garden.outsideColor).toBe('#d8e3c8');
+	});
+
+	it('round-trips manual bounds + color and keeps name untouched', async () => {
+		const r = await call<{ garden: { name: string; gridW: number; gridH: number; outsideColor: string } }>(
+			patchGarden as Handler,
+			{ params: { id: String(gardenId) }, method: 'PATCH', body: { gridW: 20, gridH: 14, outsideColor: '#FF0000' } }
+		);
+		expect(r.status).toBe(200);
+		expect(r.json.garden.name).toBe('Lifecycle Garden');
+		expect(r.json.garden.gridW).toBe(20);
+		expect(r.json.garden.gridH).toBe(14);
+		expect(r.json.garden.outsideColor).toBe('#ff0000');
+		const back = await call<{ garden: { gridH: number } }>(getGarden as Handler, { params: { id: String(gardenId) } });
+		expect(back.json.garden.gridH).toBe(14);
+	});
+
+	it('renames without clobbering grid prefs', async () => {
+		const r = await call<{ garden: { name: string; gridW: number } }>(patchGarden as Handler, {
+			params: { id: String(gardenId) },
+			method: 'PATCH',
+			body: { name: 'Renamed' }
+		});
+		expect(r.status).toBe(200);
+		expect(r.json.garden.name).toBe('Renamed');
+		expect(r.json.garden.gridW).toBe(20);
+	});
+
+	it('rejects invalid grid values', async () => {
+		const bad = [{ gridW: 3 }, { gridH: 1000 }, { gridW: 10.5 }, { outsideColor: 'red' }, { outsideColor: '#fff' }, {}];
+		for (const body of bad) {
+			const r = await call(patchGarden as Handler, { params: { id: String(gardenId) }, method: 'PATCH', body });
+			expect(r.status, JSON.stringify(body)).toBe(400);
+		}
+	});
+
+	it('404s on a missing garden', async () => {
+		expect((await call(getGarden as Handler, { params: { id: '999999' } })).status).toBe(404);
 	});
 });

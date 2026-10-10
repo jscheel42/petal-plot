@@ -4,6 +4,10 @@ import { sql } from 'drizzle-orm';
 export const garden = sqliteTable('garden', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	name: text('name').notNull(),
+	// Grid bounds in feet; 0 = auto (plots bbox + 5 ft, client-computed).
+	gridW: integer('grid_w').notNull().default(0),
+	gridH: integer('grid_h').notNull().default(0),
+	outsideColor: text('outside_color').notNull().default('#d8e3c8'),
 	createdAt: text('created_at')
 		.notNull()
 		.default(sql`(date('now'))`)
