@@ -60,32 +60,28 @@ Free tier covers this comfortably (Workers: 100k requests/day; D1: 5M reads +
 100k writes/day, 5 GB). Data is durable across restarts with 7-day point-in-time
 restore (30 days on Workers Paid) — no backup sidecar to babysit.
 
-## Sign-in (Cloudflare Access) — anonymous read-only, owner writes
+## Edit mode — anonymous read-only, password unlocks writes
 
-Anonymous visitors GET everything (read-only). Writes (`POST/PATCH/DELETE`) require
-Cloudflare Access: the edge enforces it, and `src/hooks.server.ts` re-validates the
-injected `Cf-Access-Jwt-Assertion` JWT (RS256, aud, exp) so writes fail closed if the
-Access app is ever removed while the secrets remain set. Dev has no secrets → writes open.
+Anyone can browse (all GETs open). Writes (`POST/PATCH/DELETE`) require the
+`pp_admin` cookie: click **🔒 View-only — unlock editing** → enter the shared
+password → `POST /api/auth/session` verifies it against the `ADMIN_PASSWORD`
+worker secret and issues a 12 h HMAC cookie (`exp.sig`, constant-time compare).
+`hooks.server.ts` gates every non-GET except `/api/auth/*`; blocked writes get
+401 JSON and reopen the modal. No redirect, no IdP, no dashboard. Dev has no
+secret set → writes open.
 
-One-time setup:
+Secrets attach to **versions**, not the worker — after changing the password:
 
-1. **Zero Trust → Access → Applications → Add → Self-hosted.** Destination
-   `petal-plot.joshuascheel.com`. The wizard has no method checkboxes (they are
-   API-only now) — leave defaults and finish; step 2 trims the methods.
-2. **Policy** (inside the wizard): Action **Allow** · add identity rule
-   `emails` equals `jscheel42@gmail.com` · Login method: One-time PIN
-   (add Google IdP for the button).
-3. **Trim allowed actions to writes** (anonymous GETs must pass the edge):
-   create a Custom API token (My Profile → API Tokens → Create Token →
-   Account → `Access: Apps and Policies` → `Edit`), then
-   `CLOUDFLARE_API_TOKEN=<token> node scripts/configure-access.mjs`
-   — sets `allowed_actions: POST,PATCH,DELETE` and prints the app's AUD tag.
-   ⚠️ Until this runs, anonymous visitors can't even read (app covers GET too).
-4. `npx wrangler secret put ACCESS_AUD` (AUD tag from step 3) +
-   `npx wrangler secret put ACCESS_TEAM` (Zero Trust subdomain), then redeploy.
+```bash
+echo -n '<new-password>' | npx wrangler versions secret put ADMIN_PASSWORD
+# → prints a new version id; then:
+npx wrangler versions deploy "<version-id>@100" -y
+```
 
-UX: a blocked write shows the 🔒 "Sign in to edit" banner; its button POSTs a hidden
-form to `/api/auth/sign-in`, Access runs the login, the handler bounces back to `/`.
+(`wrangler secret put` does NOT reach versions-uploaded workers — the gate
+silently stays open; verify with `curl -X POST /api/gardens/1/plots` → 401.)
+
+Change the password anytime: same two commands with a new value.
 
 
 ## Canvas controls
@@ -110,10 +106,10 @@ form to `/api/auth/sign-in`, Access runs the login, the handler bounces back to 
 ## Layout
 
 ```
-src/lib/server/    schema.ts · db.ts · rotation.ts · layout.ts · access.ts · test-db.ts
-src/routes/api/    gardens · plots · plantings · plants catalog · auth/sign-in
+src/lib/server/    schema.ts · db.ts · rotation.ts · layout.ts · auth.ts · test-db.ts
+src/routes/api/    gardens · plots · plantings · plants catalog · auth/session
 src/lib/components/ Canvas.svelte · DetailPanel.svelte · PlotEditor.svelte
-src/hooks.server.ts Access JWT gate (writes only)
+src/hooks.server.ts password-gate for writes (pp_admin cookie)
 drizzle/           SQL migrations (0000 schema … 0005 seeds) — applied by wrangler
 scripts/           one-off SQL (Cloud Run data port)
 wrangler.jsonc     worker + D1 binding + assets config
