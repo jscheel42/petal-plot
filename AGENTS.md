@@ -18,11 +18,14 @@ browser (+page.svelte, Canvas/DetailPanel/PlotEditor)
 ```
 
 - **Env access is always `import { env } from 'cloudflare:workers'`** (`env.DB`, `env.ADMIN_PASSWORD`). `event.platform` is NOT populated by this adapter setup — never read secrets/bindings off it.
-- **Auth**: `hooks.server.ts` rejects every non-GET (except `/api/auth/*`) without a valid `pp_admin` cookie (`exp.hmac` from `src/lib/server/auth.ts`, verified constant-time, 12 h TTL). Password checked against `ADMIN_PASSWORD` secret in `POST /api/auth/session`. No secret set (dev) → writes open.
+- **Auth**: `hooks.server.ts` rejects every non-GET (except `/api/auth/*`) without a valid `pp_admin` cookie (`exp.hmac` from `src/lib/server/auth.ts`, verified constant-time). Password checked against `ADMIN_PASSWORD` secret in `POST /api/auth/session`; cookie is httpOnly, sameSite=lax, secure-on-https, path=/, 12 h TTL. No secret set (dev) → writes open.
 - Client 401/403 on a write → `api()` dispatches `window` event `'ppsignin'` → `+page.svelte` opens the password modal. Custom events: no colons (parse as Svelte modifiers); listen via `$effect` + `addEventListener`, not `svelte:window` attrs.
 - **Dates**: clients send LOCAL calendar dates (`isoDaysAgo` formats from local components — never `toISOString()`); server clock is UTC. `planting.ended_on` is the harvest day and EXCLUSIVE (row absent from `asof=endedOn`).
 - **History is immutable-ish**: harvest sets `ended_on`; planting rows are edited/deleted only via the explicit data-fix endpoints.
-- Rotation: `rotation.ts` warns when a plot repeats a plant `family` in consecutive years; `layout.ts` computes footprints/overlap/auto-place (grid unit = 1 ft).
+- Rotation: `rotation.ts` (`Warning.kind: 'occupancy'|'rotation'|'unknown'`) warns when a plot repeats a plant `family` in consecutive years; `layout.ts` computes footprints/overlap/auto-place (grid unit = 1 ft).
+- `GET /api/gardens/[id]/plots?asof=` returns plots + server-computed planting bands (`fx/fy/fw/fh` via `footprint`/`autoPlace`, anchors clamped) + prior-calendar-year rotation `warning`.
+- `PATCH /api/plantings/[id]` is dual-mode: `{x,y}` repositions the band (bounds + occupancy vs other active bands, 409); `{plantId?,quantity?,plantedOn?,endedOn?}` edits the record — `endedOn:''`/null reactivates, bare `{}` = harvest today (legacy).
+- Validation statuses: 400 aggregated human messages, 404 missing, 409 overlap. `plantedOn` tolerated up to today+1 day; auto-placement never rejects (parks at plot bottom).
 
 ## Key Directories
 
