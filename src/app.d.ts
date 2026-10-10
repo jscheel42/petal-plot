@@ -5,7 +5,7 @@ import type { D1Database, ExecutionContext } from '@cloudflare/workers-types';
 declare global {
 	namespace App {
 		interface Platform {
-			env: { DB: D1Database; ACCESS_TEAM?: string; ACCESS_AUD?: string };
+			env: { DB: D1Database; ADMIN_PASSWORD?: string };
 			ctx: ExecutionContext;
 		}
 		interface Locals {

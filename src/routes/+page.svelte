@@ -48,14 +48,42 @@ function showToast(msg: string) {
 	setTimeout(() => (toast = null), 3500);
 }
 
-// Cloudflare Access: anonymous visitors browse; a blocked write raises
-// 'pp:sign-in-required' (from api.ts) and this banner offers the login.
-let needSignIn = $state(false);
+// Edit mode: anonymous visitors are read-only; the shared password unlocks
+// writes (pp_admin cookie, 12h). Blocked writes raise 'ppsignin' → modal.
+let authed = $state(true);
+let showAuth = $state(false);
+let pw = $state('');
+let authErr = $state('');
 $effect(() => {
-	const h = () => (needSignIn = true);
+	const h = () => {
+		authed = false;
+		showAuth = true;
+	};
 	window.addEventListener('ppsignin', h);
 	return () => window.removeEventListener('ppsignin', h);
 });
+$effect(() => {
+	api<{ authed: boolean }>('/api/auth/session')
+		.then((r) => (authed = r.authed))
+	.catch(() => {});
+});
+async function unlock() {
+	authErr = '';
+	try {
+		await api('/api/auth/session', { method: 'POST', body: JSON.stringify({ password: pw }) });
+		authed = true;
+		showAuth = false;
+		pw = '';
+		showToast('✏️ Editing unlocked');
+	} catch (e) {
+		authErr = String(e).replace('Error: ', '');
+	}
+}
+async function lock() {
+	await api('/api/auth/session', { method: 'DELETE' }).catch(() => {});
+	authed = false;
+	showToast('🔒 Locked — read-only');
+}
 
 function onPlotContext(plotId: number, x: number, y: number) {
 	ctx = { plotId, x, y };
@@ -222,14 +250,36 @@ const createClash = $derived(
 	</div>
 {/if}
 
-{#if needSignIn}
-	<div class="fixed left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-sky-700 px-4 py-2 text-sm text-white shadow-lg">
-		🔒 Sign in to edit — anonymous visitors are read-only
-		<button
-			class="rounded bg-white px-2 py-0.5 font-medium text-sky-700 hover:bg-sky-50"
-			onclick={() => document.querySelector<HTMLFormElement>('form#pp-signin')?.submit()}>Sign in</button
-		>
+<div class="fixed left-1/2 top-3 z-40 -translate-x-1/2">
+	{#if authed}
+		<div class="flex items-center gap-2 rounded-full bg-green-600/90 px-3 py-1 text-xs text-white shadow">
+			✏️ Editing
+			<button class="underline hover:no-underline" onclick={lock}>Log out</button>
+		</div>
+	{:else}
+		<button class="rounded-full bg-stone-800/85 px-3 py-1 text-xs text-white shadow hover:bg-stone-700" onclick={() => (showAuth = true)}>
+			🔒 View-only — unlock editing
+		</button>
+	{/if}
+</div>
+
+{#if showAuth}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-label="Unlock editing">
+		<form class="w-72 rounded-xl bg-white p-5 shadow-xl" onsubmit={(e) => { e.preventDefault(); void unlock(); }}>
+			<h2 class="mb-1 text-base font-semibold">🔒 Unlock editing</h2>
+			<p class="mb-3 text-xs text-stone-500">Anyone can view the garden; the password enables planting, editing and deleting.</p>
+			<input
+				type="password"
+				bind:value={pw}
+				class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+				placeholder="Password"
+				autocomplete="current-password"
+			/>
+			{#if authErr}<p class="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700">{authErr}</p>{/if}
+			<div class="mt-3 flex justify-end gap-2">
+				<button type="button" class="rounded px-3 py-1.5 text-sm text-stone-500 hover:bg-stone-100" onclick={() => (showAuth = false)}>Cancel</button>
+				<button type="submit" class="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">Unlock</button>
+			</div>
+		</form>
 	</div>
 {/if}
-<form id="pp-signin" method="POST" action="/api/auth/sign-in" class="hidden"></form>
-<!-- signin listener registered in the script -->

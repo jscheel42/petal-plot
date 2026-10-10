@@ -1,9 +1,9 @@
 // Tiny fetch helper for the client: JSON in/out, throws on non-2xx.
-// Cloudflare Access blocks anonymous writes at the edge (403, or a CORS
-// failure when fetch follows the login redirect) — both surface as
-// "sign-in required" plus a global banner trigger.
+// Anonymous writes get a 401 from the server gate — surface that as
+// "sign-in required" plus the global modal trigger ('ppsignin'). The
+// /api/auth/* endpoints themselves must not re-trigger the modal.
 export async function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-	const write = (init?.method ?? 'GET') !== 'GET';
+	const write = (init?.method ?? 'GET') !== 'GET' && !path.startsWith('/api/auth/');
 	let res: Response;
 	try {
 		res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...init });
