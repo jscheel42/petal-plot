@@ -476,14 +476,16 @@ async function loadGrid() {
 		const outside = /^#[0-9a-f]{6}$/i.test(g.outsideColor) ? g.outsideColor : DEFAULT_OUTSIDE;
 		if (g.gridW === 0 && g.gridH === 0 && outside === DEFAULT_OUTSIDE && local) {
 			gridSave = local;
-			void api(`/api/gardens/${key}`, {
+			// raw fetch: a background migration must NOT trigger the signin modal on 401
+			void fetch(`/api/gardens/${key}`, {
 				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ gridW: local.auto ? 0 : local.w, gridH: local.auto ? 0 : local.h, outsideColor: local.outside })
 			})
-				.then(() => localStorage.removeItem(`petalPlot.grid.${key}`))
-				.catch(() => {
-					// view-only / offline: keep local copy on this device
-				});
+				.then((res) => {
+					if (res.ok) localStorage.removeItem(`petalPlot.grid.${key}`);
+				})
+				.catch(() => {});
 			return;
 		}
 		const manual = Number.isInteger(g.gridW) && Number.isInteger(g.gridH) && g.gridW >= 4 && g.gridH >= 4;
